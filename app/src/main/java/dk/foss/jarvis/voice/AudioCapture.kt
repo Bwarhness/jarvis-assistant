@@ -38,7 +38,7 @@ class AudioCapture(private val context: Context) {
             var record: AudioRecord? = null
             try {
                 val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL, ENCODING)
-                val bufSize = maxOf(minBuf, SAMPLE_RATE / 5 * 2) // ~200ms
+                val bufSize = maxOf(minBuf, SAMPLE_RATE) // ~1s internal headroom
                 record = AudioRecord(
                     MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     SAMPLE_RATE, CHANNEL, ENCODING, bufSize,
@@ -49,7 +49,12 @@ class AudioCapture(private val context: Context) {
                 }
 
                 val pcm = ByteArrayOutputStream()
-                val buf = ShortArray(bufSize / 2)
+                val frame = ShortArray(FRAME_SAMPLES) // ~50ms frames for snappy onset
+                // Pre-roll ring buffer: keep the most recent frames so that when speech
+                // is detected we can PREPEND them — otherwise the start of the first
+                // word (the frames before detection) is lost.
+                val preRoll = ArrayDeque<ByteArray>()
+                var preRollMs = 0
                 record.startRecording()
 
                 var speechStarted = false
@@ -59,13 +64,19 @@ class AudioCapture(private val context: Context) {
                 var notifiedStart = false
 
                 while (active && gen == generation) {
-                    val n = record.read(buf, 0, buf.size)
+                    val n = record.read(frame, 0, frame.size)
                     if (n <= 0) continue
                     val frameMs = n * 1000 / SAMPLE_RATE
                     elapsedMs += frameMs
 
-                    val rms = rms(buf, n)
+                    val rms = rms(frame, n)
                     val loud = rms > SPEECH_RMS
+
+                    val bytes = ByteArray(n * 2)
+                    for (i in 0 until n) {
+                        bytes[i * 2] = (frame[i].toInt() and 0xFF).toByte()
+                        bytes[i * 2 + 1] = (frame[i].toInt() shr 8 and 0xFF).toByte()
+                    }
 
                     if (loud) {
                         speechFrames++
@@ -76,14 +87,21 @@ class AudioCapture(private val context: Context) {
                     }
 
                     if (speechStarted) {
-                        if (!notifiedStart) { notifiedStart = true; post { onSpeechStart() } }
-                        // append bytes (little-endian PCM16)
-                        val bytes = ByteArray(n * 2)
-                        for (i in 0 until n) {
-                            bytes[i * 2] = (buf[i].toInt() and 0xFF).toByte()
-                            bytes[i * 2 + 1] = (buf[i].toInt() shr 8 and 0xFF).toByte()
+                        if (!notifiedStart) {
+                            notifiedStart = true
+                            // Flush the pre-roll first so the word onset is included.
+                            while (preRoll.isNotEmpty()) pcm.write(preRoll.removeFirst())
+                            post { onSpeechStart() }
                         }
                         pcm.write(bytes)
+                    } else {
+                        // Not speaking yet — keep this frame in the pre-roll (capped).
+                        preRoll.addLast(bytes)
+                        preRollMs += frameMs
+                        while (preRollMs > PREROLL_MS && preRoll.isNotEmpty()) {
+                            preRoll.removeFirst()
+                            preRollMs -= frameMs
+                        }
                     }
 
                     val ended = speechStarted && silenceMs >= END_SILENCE_MS
@@ -94,10 +112,11 @@ class AudioCapture(private val context: Context) {
 
                 record.stop()
 
-                // Require enough *real* speech before transcribing, else treat as
+                // Require enough *real* loud speech (not just bytes — pre-roll padding
+                // would inflate the byte count) before transcribing, else treat as
                 // no-speech. Stops ambient noise/silence blips from being sent to
                 // Scribe (which hallucinates phantom phrases on near-silence).
-                val enough = speechStarted && pcm.size() >= MIN_SPEECH_BYTES
+                val enough = speechStarted && speechFrames >= MIN_SPEECH_FRAMES
                 val superseded = gen != generation
                 Log.d(TAG, "capture done: gen=$gen cur=$generation speechStarted=$speechStarted bytes=${pcm.size()} -> ${if (superseded) "superseded" else if (enough) "transcribe" else "no-speech"}")
                 if (superseded) {
@@ -177,10 +196,12 @@ class AudioCapture(private val context: Context) {
         const val SAMPLE_RATE = 16000
         const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
+        const val FRAME_SAMPLES = SAMPLE_RATE / 20 // 50ms frames
+        const val PREROLL_MS = 600        // audio kept before detection so word onsets aren't clipped
         const val SPEECH_RMS = 1000.0     // RMS above this = speech (higher = less noise-trigger)
         const val END_SILENCE_MS = 1800   // trailing silence that ends a turn (allows mid-sentence pauses)
         const val NO_SPEECH_MS = 8000     // give up if nobody speaks
         const val MAX_MS = 30000          // hard cap on a single utterance
-        const val MIN_SPEECH_BYTES = SAMPLE_RATE * 2 * 400 / 1000 // ~400ms of real speech required
+        const val MIN_SPEECH_FRAMES = 6   // ~300ms of actual loud speech required (50ms frames)
     }
 }
