@@ -81,7 +81,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
             lastTrigger = assistTrigger
             // Only (re)start from an assist trigger when not already mid-turn.
             if (hasPermission && state == ConvState.Idle) {
-                vm.startListening()
+                vm.startListening(fromWake = true)
             }
         }
     }
@@ -173,7 +173,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
 }
 
 private fun stateLabel(state: ConvState): String = when (state) {
-    ConvState.Idle -> "Tap the mic to talk"
+    ConvState.Idle -> "Say “Hey Jarvis” or tap the mic"
     ConvState.Listening -> "Listening…"
     ConvState.Thinking -> "Thinking…"
     ConvState.Speaking -> "Speaking…"

@@ -54,6 +54,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var turn = 0 // bumped each turn; stale async callbacks check this and bail
     private var retriedThisTurn = false
 
+    // While idle in a conversation we re-arm "Hey Jarvis" so the user can re-activate
+    // by voice. Loop-breaker: if wake-triggered turns keep coming back empty, stop
+    // re-arming and require a tap (real speech / a tap resets the counter).
+    private var currentTurnFromWake = false
+    private var emptyWakeTurns = 0
+    private val rearmWake = Runnable { WakeWordService.resumeListening() }
+
     // Speak a complete sentence that's been sitting in the buffer once the stream
     // goes quiet (e.g. the agent paused to run a tool), not only when more text arrives.
     private val idleFlush = Runnable { flushPendingSentence() }
@@ -85,11 +92,14 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun startListening() {
+    fun startListening(fromWake: Boolean = false) {
         // A conversation auto-continues: after Jarvis speaks it listens again.
         continuous = true
         retriedThisTurn = false
-        // Free the mic from the always-on wake listener so STT can record.
+        currentTurnFromWake = fromWake
+        // Free the mic from the always-on wake listener so STT can record, and cancel
+        // any pending re-arm so the wake engine doesn't grab the mic mid-capture.
+        main.removeCallbacks(rearmWake)
         WakeWordService.pauseListening()
         viewModelScope.launch {
             ensureReady()
@@ -132,6 +142,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun resetView() {
         turn++ // invalidate any in-flight callbacks from a prior screen visit
+        main.removeCallbacks(rearmWake)
+        emptyWakeTurns = 0
+        currentTurnFromWake = false
         runCatching { recognizer?.stop() }
         source?.cancel(); source = null
         transcript.value = ""
@@ -176,6 +189,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun think(userText: String) {
         val myTurn = turn
+        emptyWakeTurns = 0 // got real speech — reset the wake loop-breaker
         // Pipeline state was already cleared by beginTurn(); only the stream-status
         // flags are new for this thinking phase.
         state.value = ConvState.Thinking
@@ -316,6 +330,15 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun goIdle() {
         state.value = ConvState.Idle
+        main.removeCallbacks(rearmWake)
+        // Count consecutive *wake-triggered* empty turns; a non-wake idle (after a
+        // real exchange, a tap, or auto-listen) resets the counter.
+        if (currentTurnFromWake) emptyWakeTurns++ else emptyWakeTurns = 0
+        if (emptyWakeTurns <= MAX_EMPTY_WAKE) {
+            // Re-arm "Hey Jarvis" after a short settle so TTS tail/echo can't self-trigger.
+            main.postDelayed(rearmWake, WAKE_REARM_DELAY_MS)
+        }
+        // else: too many empty wake turns in a row — require a tap (loop-breaker).
     }
 
     private fun ensureFallback(): TtsEngine? {
@@ -334,8 +357,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAll() {
         continuous = false
         turn++
+        emptyWakeTurns = 0
         main.removeCallbacks(idleFlush)
         main.removeCallbacks(stallIndicator)
+        main.removeCallbacks(rearmWake)
         working.value = false
         stalled.value = false
         recognizer?.release()
@@ -356,6 +381,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         main.removeCallbacks(idleFlush)
         main.removeCallbacks(stallIndicator)
+        main.removeCallbacks(rearmWake)
         recognizer?.release()
         source?.cancel()
         tts?.shutdown()
@@ -368,5 +394,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val IDLE_FLUSH_MS = 350L
         const val STALL_MS = 800L
+        const val WAKE_REARM_DELAY_MS = 1200L
+        const val MAX_EMPTY_WAKE = 2 // consecutive empty wake turns before requiring a tap
     }
 }
