@@ -3,6 +3,11 @@ package dk.foss.jarvis.data
 import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import dk.foss.jarvis.hermes.ChatMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -12,15 +17,20 @@ import java.util.UUID
  */
 class ConversationRepository private constructor(private val store: ConversationStore) {
 
+    // App-lifetime scope so a fire-and-forget save survives a ViewModel being cleared
+    // (viewModelScope is cancelled BEFORE onCleared runs, which would drop the last save).
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     val messages: SnapshotStateList<UiMessage> = mutableStateListOf()
 
-    var sessionId: String? = null
+    // sessionId/dirty are written from the SSE callback thread and read on main.
+    @Volatile var sessionId: String? = null
         private set
 
     private var activeId: String = UUID.randomUUID().toString()
     private var title: String = ""
     private var createdAt: Long = System.currentTimeMillis()
-    private var dirty = false
+    @Volatile private var dirty = false
 
     fun startNew() {
         activeId = UUID.randomUUID().toString()
@@ -69,9 +79,9 @@ class ConversationRepository private constructor(private val store: Conversation
         }
     }
 
-    /** History (non-error) as role/text pairs for building a Hermes request. */
-    fun historyForRequest(): List<Pair<String, String>> =
-        messages.filter { !it.isError }.map { it.role to it.text }
+    /** History (non-error) as Hermes chat messages for building a request. */
+    fun historyForRequest(): List<ChatMessage> =
+        messages.filter { !it.isError }.map { ChatMessage(it.role, it.text) }
 
     suspend fun persist() {
         if (!dirty) return
@@ -87,6 +97,11 @@ class ConversationRepository private constructor(private val store: Conversation
             ),
         )
         dirty = false
+    }
+
+    /** Fire-and-forget save on the app-lifetime scope (safe to call at teardown). */
+    fun persistAsync() {
+        ioScope.launch { persist() }
     }
 
     suspend fun list(): List<ConversationMeta> = store.list()

@@ -1,17 +1,16 @@
 package dk.foss.jarvis.hermes
 
+import dk.foss.jarvis.net.Http
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
-import java.util.concurrent.TimeUnit
 
 /**
  * Talks to a Hermes `api_server`. This is the ONLY coupling to Hermes:
@@ -23,12 +22,6 @@ class HermesClient(
     private val apiKey: String,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS) // long-lived SSE stream
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
 
     interface StreamCallbacks {
         fun onDelta(textDelta: String)
@@ -94,7 +87,7 @@ class HermesClient(
                 cb.onError(msg)
             }
         }
-        return EventSources.createFactory(client).newEventSource(builder.build(), listener)
+        return EventSources.createFactory(Http.streaming).newEventSource(builder.build(), listener)
     }
 
     /** GET /v1/models — returns model ids on success, or a failure with the reason. */
@@ -105,7 +98,7 @@ class HermesClient(
                 .addHeader("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
-            client.newCall(req).execute().use { resp ->
+            Http.base.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     throw RuntimeException("HTTP ${resp.code}: ${text.take(200).ifBlank { resp.message }}")

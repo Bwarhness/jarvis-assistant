@@ -14,8 +14,14 @@ class ConversationStore(context: Context) {
 
     suspend fun save(conversation: Conversation) = withContext(Dispatchers.IO) {
         runCatching {
-            File(dir, "${conversation.id}.json")
-                .writeText(json.encodeToString(Conversation.serializer(), conversation))
+            // Write to a temp file then atomically rename, so concurrent/torn writes
+            // can't corrupt the JSON.
+            val target = File(dir, "${conversation.id}.json")
+            val tmp = File(dir, "${conversation.id}.json.tmp")
+            tmp.writeText(json.encodeToString(Conversation.serializer(), conversation))
+            if (!tmp.renameTo(target)) {
+                target.writeText(tmp.readText()); tmp.delete()
+            }
         }
         Unit
     }

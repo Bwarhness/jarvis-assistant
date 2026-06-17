@@ -3,14 +3,12 @@ package dk.foss.jarvis.ui
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.JarvisSettings
 import dk.foss.jarvis.data.SettingsStore
-import dk.foss.jarvis.hermes.ChatMessage
 import dk.foss.jarvis.hermes.HermesClient
 import dk.foss.jarvis.voice.AndroidTts
 import dk.foss.jarvis.voice.ElevenLabsTts
@@ -31,6 +29,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: VoiceRecognizer? = null
+
+    /** Run on the main thread; returns Unit so it fits expression-body callbacks. */
+    private fun onMain(block: () -> Unit) { main.post(block) }
 
     val state = mutableStateOf(ConvState.Idle)
     val transcript = mutableStateOf("")
@@ -85,7 +86,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startListening() {
-        Log.i(TAG, "startListening (continuous=$continuous)")
         // A conversation auto-continues: after Jarvis speaks it listens again.
         continuous = true
         retriedThisTurn = false
@@ -145,62 +145,56 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private fun startRecognition() {
         val myTurn = turn
         recognizer?.start(languageTag = null, listener = object : VoiceRecognizer.Listener {
-            override fun onPartial(text: String) = main.post {
+            override fun onPartial(text: String) = onMain {
                 if (turn == myTurn) transcript.value = text
-            }.let {}
+            }
 
-            override fun onEnd() = main.post {
+            override fun onEnd() = onMain {
                 // Recording finished — show "Thinking" while Scribe transcribes.
                 if (turn == myTurn && state.value == ConvState.Listening) state.value = ConvState.Thinking
-            }.let {}
+            }
 
-            override fun onFinal(text: String) = main.post {
-                if (turn != myTurn) return@post
-                Log.i(TAG, "onFinal text=\"$text\"")
+            override fun onFinal(text: String) = onMain {
+                if (turn != myTurn) return@onMain
                 transcript.value = text
                 if (text.isBlank()) goIdle() else think(text)
-            }.let {}
+            }
 
-            override fun onError(message: String, transient: Boolean) = main.post {
-                if (turn != myTurn) return@post
-                Log.i(TAG, "rec onError=\"$message\" transient=$transient retried=$retriedThisTurn")
+            override fun onError(message: String, transient: Boolean) = onMain {
+                if (turn != myTurn) return@onMain
                 // Cold-start / mic-handoff hiccup right after a wake — retry once.
                 if (transient && !retriedThisTurn) {
                     retriedThisTurn = true
                     main.postDelayed({ if (turn == myTurn) startRecognition() }, 450)
-                    return@post
+                    return@onMain
                 }
                 error.value = message
                 goIdle()
-            }.let {}
+            }
         })
     }
 
     private fun think(userText: String) {
         val myTurn = turn
+        // Pipeline state was already cleared by beginTurn(); only the stream-status
+        // flags are new for this thinking phase.
         state.value = ConvState.Thinking
-        reply.value = ""
-        sentenceBuffer.setLength(0)
-        ttsQueue.clear()
-        speaking = false
-        streamDone = false
         working.value = true
-        stalled.value = false
         main.postDelayed(stallIndicator, STALL_MS)
         repo.addMessage("user", userText)
-        val requestHistory = repo.historyForRequest().map { ChatMessage(it.first, it.second) }
+        val requestHistory = repo.historyForRequest()
 
         val s = settings ?: return
         val client = HermesClient(s.baseUrl, s.apiKey)
         source = client.streamChat(requestHistory, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
-            override fun onDelta(textDelta: String) = main.post {
+            override fun onDelta(textDelta: String) = onMain {
                 if (turn == myTurn) onTextDelta(textDelta)
-            }.let {}
+            }
 
             override fun onSessionId(id: String) { repo.setSessionId(id) }
 
-            override fun onComplete() = main.post {
-                if (turn != myTurn) return@post
+            override fun onComplete() = onMain {
+                if (turn != myTurn) return@onMain
                 main.removeCallbacks(idleFlush)
                 main.removeCallbacks(stallIndicator)
                 working.value = false
@@ -213,16 +207,16 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 viewModelScope.launch { repo.persist() }
                 streamDone = true
                 pump()
-            }.let {}
+            }
 
-            override fun onError(message: String) = main.post {
-                if (turn != myTurn) return@post
+            override fun onError(message: String) = onMain {
+                if (turn != myTurn) return@onMain
                 main.removeCallbacks(stallIndicator)
                 working.value = false
                 stalled.value = false
                 error.value = message
                 goIdle()
-            }.let {}
+            }
         })
     }
 
@@ -321,7 +315,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      * To re-engage after a silence, tap the mic.
      */
     private fun goIdle() {
-        Log.i(TAG, "goIdle (wake stays paused)")
         state.value = ConvState.Idle
     }
 
@@ -337,8 +330,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             else -> startListening()
         }
     }
-
-    fun setContinuous(value: Boolean) { continuous = value }
 
     fun stopAll() {
         continuous = false
@@ -356,21 +347,25 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         speaking = false
         streamDone = false
         state.value = ConvState.Idle
-        // Hand the mic back to the always-on wake listener.
+        // Save the conversation (covers turns that ended in an error/cancel, not just
+        // successful replies) before handing the mic back to the wake listener.
+        repo.persistAsync()
         WakeWordService.resumeListening()
     }
 
     override fun onCleared() {
+        main.removeCallbacks(idleFlush)
+        main.removeCallbacks(stallIndicator)
         recognizer?.release()
         source?.cancel()
         tts?.shutdown()
         androidFallback?.shutdown()
+        repo.persistAsync()
         WakeWordService.resumeListening()
         super.onCleared()
     }
 
     private companion object {
-        const val TAG = "JarvisConv"
         const val IDLE_FLUSH_MS = 350L
         const val STALL_MS = 800L
     }

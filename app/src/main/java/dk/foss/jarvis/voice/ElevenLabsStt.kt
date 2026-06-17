@@ -1,16 +1,15 @@
 package dk.foss.jarvis.voice
 
+import dk.foss.jarvis.net.Http
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** ElevenLabs Scribe speech-to-text (POST /v1/speech-to-text, multipart). */
 class ElevenLabsStt(
@@ -19,11 +18,6 @@ class ElevenLabsStt(
     private val languageCode: String? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
 
     suspend fun transcribe(file: File): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
@@ -38,7 +32,7 @@ class ElevenLabsStt(
                 .addHeader("xi-api-key", apiKey)
                 .post(multipart)
                 .build()
-            http.newCall(req).execute().use { resp ->
+            Http.base.newCall(req).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) throw RuntimeException("Scribe HTTP ${resp.code}: ${text.take(160)}")
                 json.decodeFromString(ScribeResponse.serializer(), text).text.trim()

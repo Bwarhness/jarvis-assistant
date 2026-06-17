@@ -7,7 +7,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
@@ -118,7 +117,6 @@ class AudioCapture(private val context: Context) {
                 // Scribe (which hallucinates phantom phrases on near-silence).
                 val enough = speechStarted && speechFrames >= MIN_SPEECH_FRAMES
                 val superseded = gen != generation
-                Log.d(TAG, "capture done: gen=$gen cur=$generation speechStarted=$speechStarted bytes=${pcm.size()} -> ${if (superseded) "superseded" else if (enough) "transcribe" else "no-speech"}")
                 if (superseded) {
                     // A newer capture took over — don't deliver a stale result.
                 } else if (!enough) {
@@ -192,7 +190,6 @@ class AudioCapture(private val context: Context) {
     private fun post(block: () -> Unit) = main.post(block)
 
     private companion object {
-        const val TAG = "JarvisStt"
         const val SAMPLE_RATE = 16000
         const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         const val ENCODING = AudioFormat.ENCODING_PCM_16BIT

@@ -8,8 +8,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.SettingsStore
-import dk.foss.jarvis.data.UiMessage
-import dk.foss.jarvis.hermes.ChatMessage
 import dk.foss.jarvis.hermes.HermesClient
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -20,6 +18,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val settingsStore = SettingsStore(app)
     private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
+
+    /** Run on the main thread; returns Unit so it fits expression-body callbacks. */
+    private fun onMain(block: () -> Unit) { main.post(block) }
 
     val messages get() = repo.messages
     val isStreaming = mutableStateOf(false)
@@ -52,25 +53,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (!s.isConfigured) { notConfigured.value = true; return@launch }
 
             repo.addMessage("user", text)
-            val history = repo.historyForRequest().map { ChatMessage(it.first, it.second) }
+            val history = repo.historyForRequest()
             val assistantIndex = repo.addMessage("assistant", "")
             isStreaming.value = true
 
             val client = HermesClient(s.baseUrl, s.apiKey)
             currentSource = client.streamChat(history, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
-                override fun onDelta(textDelta: String) = main.post {
+                override fun onDelta(textDelta: String) = onMain {
                     repo.appendToMessage(assistantIndex, textDelta)
-                }.let {}
+                }
 
                 override fun onSessionId(id: String) { repo.setSessionId(id) }
 
-                override fun onComplete() = main.post {
+                override fun onComplete() = onMain {
                     isStreaming.value = false
                     currentSource = null
                     viewModelScope.launch { repo.persist() }
-                }.let {}
+                }
 
-                override fun onError(message: String) = main.post {
+                override fun onError(message: String) = onMain {
                     val cur = messages.getOrNull(assistantIndex)
                     if (cur != null && cur.text.isEmpty()) {
                         repo.replaceMessage(assistantIndex, "⚠️ $message", isError = true)
@@ -80,14 +81,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     isStreaming.value = false
                     currentSource = null
                     viewModelScope.launch { repo.persist() }
-                }.let {}
+                }
             })
         }
     }
 
     override fun onCleared() {
         cancel()
-        viewModelScope.launch { repo.persist() }
+        repo.persistAsync() // viewModelScope is already cancelled here
         super.onCleared()
     }
 }
