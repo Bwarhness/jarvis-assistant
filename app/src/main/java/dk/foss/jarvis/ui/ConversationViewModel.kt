@@ -50,6 +50,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var turn = 0 // bumped each turn; stale async callbacks check this and bail
     private var retriedThisTurn = false
 
+    // Speak a complete sentence that's been sitting in the buffer once the stream
+    // goes quiet (e.g. the agent paused to run a tool), not only when more text arrives.
+    private val idleFlush = Runnable { flushPendingSentence() }
+
     init {
         viewModelScope.launch { ensureReady() }
     }
@@ -96,6 +100,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     /** Start a fresh turn: invalidate in-flight callbacks and clear pipeline state. */
     private fun beginTurn() {
         turn++
+        main.removeCallbacks(idleFlush)
         source?.cancel(); source = null
         runCatching { tts?.stop(); androidFallback?.stop() }
         ttsQueue.clear()
@@ -159,6 +164,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
             override fun onComplete() = main.post {
                 if (turn != myTurn) return@post
+                main.removeCallbacks(idleFlush)
                 // flush whatever's left as the final sentence
                 val rest = sentenceBuffer.toString().trim()
                 sentenceBuffer.setLength(0)
@@ -181,6 +187,18 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         reply.value += delta
         sentenceBuffer.append(delta)
         extractSentences()
+        // If the stream then goes quiet (tool call / thinking) with a finished
+        // sentence still buffered, speak it rather than waiting for the next token.
+        main.removeCallbacks(idleFlush)
+        main.postDelayed(idleFlush, IDLE_FLUSH_MS)
+    }
+
+    private fun flushPendingSentence() {
+        val s = sentenceBuffer.toString().trim()
+        if (s.isNotEmpty() && (s.endsWith('.') || s.endsWith('!') || s.endsWith('?'))) {
+            sentenceBuffer.setLength(0)
+            enqueueSpeech(s)
+        }
     }
 
     private fun extractSentences() {
@@ -266,6 +284,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAll() {
         continuous = false
         turn++
+        main.removeCallbacks(idleFlush)
         recognizer?.release()
         recognizer = null
         runCatching { tts?.stop(); androidFallback?.stop() }
@@ -286,5 +305,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         androidFallback?.shutdown()
         WakeWordService.resumeListening()
         super.onCleared()
+    }
+
+    private companion object {
+        const val IDLE_FLUSH_MS = 350L
     }
 }
