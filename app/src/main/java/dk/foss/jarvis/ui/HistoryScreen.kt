@@ -22,13 +22,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,41 +40,64 @@ fun HistoryScreen(vm: HistoryViewModel, onOpen: () -> Unit, onBack: () -> Unit) 
     LaunchedEffect(Unit) { vm.refresh() }
     val items by vm.items
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("History") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { vm.startNew(onOpen) }) {
-                        Icon(Icons.Default.Add, contentDescription = "New conversation")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        if (items.isEmpty()) {
-            Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "No conversations yet",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    DeepSpaceBackground(active = false) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            "History",
+                            fontFamily = SpaceGrotesk,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = JarvisColors.Cyan,
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { vm.startNew(onOpen) }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "New conversation",
+                                tint = JarvisColors.Cyan,
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = JarvisColors.TextPrimary,
+                    ),
                 )
-            }
-        } else {
-            LazyColumn(Modifier.padding(padding).fillMaxSize()) {
-                items(items, key = { it.id }) { meta ->
-                    Row2(
-                        title = meta.title,
-                        subtitle = "${DateUtils.getRelativeTimeSpanString(meta.updatedAt)} · ${meta.messageCount} msgs",
-                        onClick = { vm.open(meta.id) { onOpen() } },
-                        onDelete = { vm.delete(meta.id) },
+            },
+        ) { padding ->
+            if (items.isEmpty()) {
+                Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No conversations yet",
+                        fontFamily = SpaceGrotesk,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 16.sp,
+                        color = JarvisColors.Muted,
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                }
+            } else {
+                LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+                    items(items, key = { it.id }) { meta ->
+                        Row2(
+                            title = meta.title,
+                            subtitle = "${DateUtils.getRelativeTimeSpanString(meta.updatedAt)} \u00b7 ${meta.messageCount} msgs",
+                            onClick = { vm.open(meta.id) { onOpen() } },
+                            onDelete = { vm.delete(meta.id) },
+                        )
+                        HorizontalDivider(color = JarvisColors.Cyan.copy(alpha = 0.08f))
+                    }
                 }
             }
         }
@@ -90,19 +117,27 @@ private fun Row2(title: String, subtitle: String, onClick: () -> Unit, onDelete:
         Column(Modifier.weight(1f)) {
             Text(
                 text = title.ifBlank { "Conversation" },
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = SpaceGrotesk,
+                fontWeight = FontWeight.Medium,
+                fontSize = 15.sp,
+                color = JarvisColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = DmSans,
+                fontWeight = FontWeight.Normal,
+                fontSize = 12.sp,
+                color = JarvisColors.Muted,
             )
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete")
+            Icon(
+                Icons.Default.DeleteOutline,
+                contentDescription = "Delete",
+                tint = JarvisColors.Muted,
+            )
         }
     }
 }

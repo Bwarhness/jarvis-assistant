@@ -1,3 +1,4 @@
 <resources>
     <color name="ic_launcher_background">#0B1020</color>
+    <color name="jarvis_backdrop">#FF05070D</color>
 </resources>

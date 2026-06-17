@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -14,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dk.foss.jarvis.data.SettingsStore
@@ -41,6 +43,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Keep the screen awake while Jarvis is in the foreground.
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Edge-to-edge dark: transparent bars, dark background, light icons.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
+        window.setBackgroundDrawableResource(android.R.color.black)
         if (isAssistIntent(intent)) {
             assistEpoch++
             showOverLockScreen()

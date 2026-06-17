@@ -1,3 +1,9 @@
 <resources>
-    <style name="Theme.Jarvis" parent="Theme.Material3.DayNight.NoActionBar" />
+    <style name="Theme.Jarvis" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/jarvis_backdrop</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>
