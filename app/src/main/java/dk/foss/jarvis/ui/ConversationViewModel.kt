@@ -66,6 +66,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startListening() {
+        // A conversation auto-continues: after Jarvis speaks it listens again.
+        continuous = true
         // Free the mic from the always-on wake listener so STT can record.
         WakeWordService.pauseListening()
         viewModelScope.launch {
