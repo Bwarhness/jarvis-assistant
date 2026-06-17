@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,8 +67,14 @@ fun SettingsScreen(onBack: () -> Unit) {
     var model by remember { mutableStateOf(SettingsStore.DEFAULT_MODEL) }
     var elevenKey by remember { mutableStateOf("") }
     var elevenVoice by remember { mutableStateOf(SettingsStore.DEFAULT_ELEVEN_VOICE) }
+    fun isBatteryExempt(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
     var wakeEnabled by remember { mutableStateOf(false) }
     var overlayGranted by remember { mutableStateOf(AndroidSettings.canDrawOverlays(context)) }
+    var batteryExempt by remember { mutableStateOf(isBatteryExempt()) }
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -76,9 +83,22 @@ fun SettingsScreen(onBack: () -> Unit) {
         ActivityResultContracts.StartActivityForResult(),
     ) { overlayGranted = AndroidSettings.canDrawOverlays(context) }
 
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { batteryExempt = isBatteryExempt() }
+
     fun requestOverlay() {
         overlayLauncher.launch(
             Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
+        )
+    }
+
+    fun requestBattery() {
+        batteryLauncher.launch(
+            Intent(
+                AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:${context.packageName}"),
+            ),
         )
     }
 
@@ -91,8 +111,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         scope.launch { store.updateWake(true) }
         WakeWordService.start(context)
         wakeEnabled = true
-        // Needed so the service can open the app from the background on detection.
-        if (!overlayGranted) requestOverlay()
+        // For reliable always-on: launch-from-background + survive battery optimization.
+        if (!overlayGranted) requestOverlay() else if (!batteryExempt) requestBattery()
     }
 
     val wakePermLauncher = rememberLauncherForActivityResult(
@@ -249,6 +269,11 @@ fun SettingsScreen(onBack: () -> Unit) {
             if (wakeEnabled && !overlayGranted) {
                 OutlinedButton(onClick = { requestOverlay() }, modifier = Modifier.fillMaxWidth()) {
                     Text("Allow “display over other apps” (needed to open on wake)")
+                }
+            }
+            if (wakeEnabled && !batteryExempt) {
+                OutlinedButton(onClick = { requestBattery() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Allow background activity (keep listening always-on)")
                 }
             }
 

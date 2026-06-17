@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -64,13 +65,16 @@ class WakeWordService : Service() {
             engine = e
             uiScope.launch { e.detections.collect { onWake(it) } }
             e.start()
+            Log.i(TAG, "wake engine started, listening for 'hey jarvis'")
         }.onFailure {
             // Most likely missing model assets or no mic permission — stop gracefully.
+            Log.e(TAG, "wake engine failed to start", it)
             stopSelf()
         }
     }
 
     private fun onWake(detection: WakeWordDetection) {
+        Log.i(TAG, "WAKE detected (score=${detection.score}) cooling=$cooling")
         if (cooling) return
         cooling = true
 
@@ -138,6 +142,7 @@ class WakeWordService : Service() {
     }
 
     companion object {
+        private const val TAG = "JarvisWake"
         private const val CHANNEL_ONGOING = "jarvis_wake_ongoing"
         private const val CHANNEL_ALERT = "jarvis_wake_alert"
         private const val NOTIF_ONGOING = 1001

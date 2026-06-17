@@ -1,6 +1,8 @@
 package dk.foss.jarvis
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -10,13 +12,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dk.foss.jarvis.data.SettingsStore
 import dk.foss.jarvis.ui.ChatScreen
 import dk.foss.jarvis.ui.ChatViewModel
 import dk.foss.jarvis.ui.ConversationScreen
 import dk.foss.jarvis.ui.ConversationViewModel
 import dk.foss.jarvis.ui.JarvisTheme
 import dk.foss.jarvis.ui.SettingsScreen
+import dk.foss.jarvis.wake.WakeWordService
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private enum class Screen { Chat, Settings, Conversation }
 
@@ -32,6 +40,7 @@ class MainActivity : ComponentActivity() {
             assistEpoch++
             showOverLockScreen()
         }
+        rearmWakeWord()
 
         setContent {
             JarvisTheme {
@@ -78,6 +87,17 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 27) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
+        }
+    }
+
+    /** If the wake word is enabled, make sure the always-on listener is running. */
+    private fun rearmWakeWord() {
+        lifecycleScope.launch {
+            val s = SettingsStore(this@MainActivity).settings.first()
+            val micOk = ContextCompat.checkSelfPermission(
+                this@MainActivity, Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (s.wakeEnabled && micOk) runCatching { WakeWordService.start(this@MainActivity) }
         }
     }
 
