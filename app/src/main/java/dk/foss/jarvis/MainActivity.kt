@@ -1,6 +1,7 @@
 package dk.foss.jarvis
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -106,6 +107,13 @@ class MainActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
+        // Actually dismiss the keyguard so the user can interact immediately.
+        val km = getSystemService(KEYGUARD_SERVICE) as? KeyguardManager
+        km?.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() {}
+            override fun onDismissCancelled() {}
+            override fun onDismissError() {}
+        })
     }
 
     /** If the wake word is enabled, make sure the always-on listener is running. */

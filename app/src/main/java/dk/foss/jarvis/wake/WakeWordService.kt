@@ -81,16 +81,38 @@ class WakeWordService : Service() {
 
         // Free the mic so conversation mode's recognizer can record, then open the app.
         pauseEngine()
-        val launch = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(MainActivity.EXTRA_FROM_ASSIST, true)
-        }
-        runCatching { startActivity(launch) }
+
+        // Fire a full-screen-intent notification so the activity reliably launches over
+        // the keyguard. A plain startActivity() is often suppressed by the OS when locked.
+        notifyWake()
 
         uiScope.launch {
             delay(4000)
             cooling = false
         }
+    }
+
+    private fun notifyWake() {
+        val launch = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(MainActivity.EXTRA_FROM_ASSIST, true)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val contentPi = PendingIntent.getActivity(this, 0, launch, flags)
+        val fullScreenPi = PendingIntent.getActivity(this, 1, launch, flags)
+
+        val notif = NotificationCompat.Builder(this, CHANNEL_WAKE)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Hey Jarvis")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setAutoCancel(true)
+            .setFullScreenIntent(fullScreenPi, true)
+            .setContentIntent(contentPi)
+            .build()
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_WAKE, notif)
     }
 
     private fun ongoingNotification(): Notification {
@@ -114,6 +136,9 @@ class WakeWordService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ONGOING, "Wake word", NotificationManager.IMPORTANCE_LOW),
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_WAKE, "Wake alerts", NotificationManager.IMPORTANCE_HIGH),
         )
     }
 
@@ -145,7 +170,9 @@ class WakeWordService : Service() {
     companion object {
         private const val TAG = "JarvisWake"
         private const val CHANNEL_ONGOING = "jarvis_wake_ongoing"
+        private const val CHANNEL_WAKE = "jarvis_wake_alert"
         private const val NOTIF_ONGOING = 1001
+        private const val NOTIF_WAKE = 1002
         private const val DETECTION_THRESHOLD = 0.5f
         private const val COOLDOWN_MS = 1500L
 
