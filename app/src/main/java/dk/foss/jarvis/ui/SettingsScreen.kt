@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,7 +26,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,16 +58,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import dk.foss.jarvis.data.SettingsStore
 import dk.foss.jarvis.hermes.HermesClient
+import dk.foss.jarvis.voice.ElevenLabsVoices
+import dk.foss.jarvis.voice.ElevenVoice
+import dk.foss.jarvis.voice.VoicePreviewPlayer
 import dk.foss.jarvis.wake.WakeWordService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +98,14 @@ fun SettingsScreen(onBack: () -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+
+    var voices by remember { mutableStateOf<List<ElevenVoice>>(emptyList()) }
+    var voicesLoading by remember { mutableStateOf(false) }
+    var voicesError by remember { mutableStateOf<String?>(null) }
+    var voicesExpanded by remember { mutableStateOf(false) }
+    val previewPlayer = remember { VoicePreviewPlayer() }
+    var previewRefresh by remember { mutableStateOf(0) }
+    var voicesAutoLoaded by remember { mutableStateOf(false) }
 
     val overlayLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -159,6 +178,28 @@ fun SettingsScreen(onBack: () -> Unit) {
         loaded = true
     }
 
+    LaunchedEffect(Unit) {
+        previewPlayer.onStateChanged = { previewRefresh++ }
+    }
+
+    LaunchedEffect(loaded, elevenKey) {
+        if (loaded && elevenKey.isNotBlank() && !voicesAutoLoaded && voices.isEmpty()) {
+            voicesAutoLoaded = true
+            voicesLoading = true
+            voicesError = null
+            val result = ElevenLabsVoices(elevenKey).list()
+            voicesLoading = false
+            result.fold(
+                onSuccess = { voices = it },
+                onFailure = { voicesError = it.message ?: "Failed to load voices" },
+            )
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { previewPlayer.release() }
+    }
+
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = JarvisColors.Cyan.copy(alpha = 0.5f),
         unfocusedBorderColor = JarvisColors.CyanBorder,
@@ -185,6 +226,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     },
                     navigationIcon = {
                         IconButton(onClick = {
+                            previewPlayer.stop()
                             scope.launch { persist() }
                             onBack()
                         }) {
@@ -306,6 +348,141 @@ fun SettingsScreen(onBack: () -> Unit) {
                     colors = textFieldColors,
                 )
 
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    PillButton(
+                        text = if (voicesLoading) "Loading\u2026" else "Load voices",
+                        onClick = {
+                            scope.launch {
+                                voicesLoading = true
+                                voicesError = null
+                                val result = ElevenLabsVoices(elevenKey).list()
+                                voicesLoading = false
+                                result.fold(
+                                    onSuccess = { voices = it },
+                                    onFailure = { voicesError = it.message ?: "Failed to load voices" },
+                                )
+                            }
+                        },
+                        accent = false,
+                        enabled = elevenKey.isNotBlank() && !voicesLoading,
+                    )
+                    if (voicesLoading) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JarvisColors.Cyan)
+                    }
+                }
+                voicesError?.let {
+                    Text(
+                        "\u2717 $it",
+                        fontFamily = DmSans,
+                        fontSize = 13.sp,
+                        color = JarvisColors.ErrorOrange,
+                    )
+                }
+
+                if (elevenKey.isBlank()) {
+                    Text(
+                        "Enter your ElevenLabs API key to load voices.",
+                        fontFamily = DmSans,
+                        fontSize = 13.sp,
+                        color = JarvisColors.Muted,
+                    )
+                }
+
+                if (voices.isNotEmpty()) {
+                    val previewId = previewPlayer.currentVoiceId
+                    val previewing = previewPlayer.isLoading || previewPlayer.isPlaying
+                    // Force reads so Compose recomposes on preview state changes
+                    @Suppress("UNUSED_VARIABLE") val _r = previewRefresh
+
+                    ExposedDropdownMenuBox(
+                        expanded = voicesExpanded,
+                        onExpandedChange = { voicesExpanded = it },
+                    ) {
+                        OutlinedTextField(
+                            value = voiceLabel(elevenVoice, voices),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Voice") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = voicesExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            colors = textFieldColors,
+                        )
+                        ExposedDropdownMenu(
+                            expanded = voicesExpanded,
+                            onDismissRequest = { voicesExpanded = false },
+                            modifier = Modifier.heightIn(max = 340.dp),
+                        ) {
+                            voices.forEach { v ->
+                                val label = buildString {
+                                    append(v.category.ifEmpty { "voice" })
+                                    v.labels["gender"]?.let { append(" \u00b7 "); append(it) }
+                                    v.labels["accent"]?.let { append(" \u00b7 "); append(it) }
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                v.name,
+                                                fontFamily = DmSans,
+                                                fontWeight = FontWeight.Medium,
+                                                fontSize = 14.sp,
+                                                color = JarvisColors.TextPrimary,
+                                            )
+                                            Text(
+                                                label,
+                                                fontFamily = DmSans,
+                                                fontSize = 11.sp,
+                                                color = JarvisColors.Muted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    },
+                                    trailingIcon = {
+                                        if (v.preview_url != null) {
+                                            IconButton(onClick = {
+                                                if (previewId == v.voice_id && previewing) {
+                                                    previewPlayer.stop()
+                                                } else {
+                                                    previewPlayer.play(v.voice_id, v.preview_url)
+                                                }
+                                            }) {
+                                                if (previewId == v.voice_id && previewPlayer.isLoading) {
+                                                    CircularProgressIndicator(
+                                                        Modifier.size(18.dp),
+                                                        strokeWidth = 2.dp,
+                                                        color = JarvisColors.Cyan,
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        imageVector = if (previewId == v.voice_id && previewPlayer.isPlaying)
+                                                            Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                                        contentDescription = if (previewId == v.voice_id && previewPlayer.isPlaying)
+                                                            "Stop" else "Preview",
+                                                        tint = JarvisColors.Cyan,
+                                                modifier = Modifier.size(20.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        elevenVoice = v.voice_id
+                                        voicesExpanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 SettingsDivider()
                 SectionHeader("System integration")
 
@@ -405,4 +582,9 @@ private fun openAssistantSettings(context: Context) {
             )
         }
     }
+}
+
+private fun voiceLabel(voiceId: String, voices: List<ElevenVoice>): String {
+    if (voiceId.isBlank()) return ""
+    return voices.firstOrNull { it.voice_id == voiceId }?.name ?: voiceId
 }
