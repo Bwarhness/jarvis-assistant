@@ -11,12 +11,12 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.rementia.openwakeword.lib.WakeWordEngine
 import com.rementia.openwakeword.lib.model.DetectionMode
-import com.rementia.openwakeword.lib.model.WakeWordDetection
 import com.rementia.openwakeword.lib.model.WakeWordModel
 import dk.foss.jarvis.MainActivity
 import dk.foss.jarvis.R
@@ -40,6 +40,15 @@ class WakeWordService : Service() {
     @Volatile private var cooling = false
     @Volatile private var paused = false
 
+    // Detection is driven off the engine's raw per-frame `scores` flow (not its
+    // single-frame `detections`), so we can smooth the confidence and trigger on a
+    // more forgiving bar. All touched only from the main thread (the collector runs there).
+    private val recentScores = ArrayDeque<Float>()
+    private var lastTriggerAt = 0L
+    // One-line-per-utterance peak log for tuning sensitivity (not per-frame spam).
+    private var burstPeak = 0f
+    private var inBurst = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -60,12 +69,14 @@ class WakeWordService : Service() {
     private fun startEngine() {
         if (engine != null) return
         runCatching {
+            // Threshold is set high so the library's own detection (and its logging) stays
+            // quiet — we make the decision ourselves from the raw `scores` flow below.
             val models = listOf(
-                WakeWordModel("hey_jarvis", "hey_jarvis_v0.1.onnx", DETECTION_THRESHOLD),
+                WakeWordModel("hey_jarvis", "hey_jarvis_v0.1.onnx", MODEL_THRESHOLD),
             )
             val e = WakeWordEngine(this, models, DetectionMode.SINGLE_BEST, COOLDOWN_MS, engineScope)
             engine = e
-            uiScope.launch { e.detections.collect { onWake(it) } }
+            uiScope.launch { e.scores.collect { onScore(it.score) } }
             e.start()
             Log.i(TAG, "wake engine started, listening for 'hey jarvis'")
         }.onFailure {
@@ -75,8 +86,39 @@ class WakeWordService : Service() {
         }
     }
 
-    private fun onWake(detection: WakeWordDetection) {
-        Log.i(TAG, "WAKE detected (score=${detection.score}) cooling=$cooling")
+    /**
+     * Raw confidence for "hey jarvis" arrives every ~80 ms. The wake phrase keeps the
+     * score elevated for several frames, so we fire on EITHER one strong frame (keeps the
+     * old behaviour, no recall regression) OR a sustained moderate average over a short
+     * window (catches utterances that peak just under the single-frame bar, or whose one
+     * strong frame lands in a momentary dip). A refractory period prevents re-fires.
+     */
+    private fun onScore(score: Float) {
+        // Track + log the peak of each voice burst (one line per utterance, for tuning).
+        if (score >= BURST_FLOOR) {
+            inBurst = true
+            if (score > burstPeak) burstPeak = score
+        } else if (inBurst) {
+            inBurst = false
+            Log.i(TAG, "voice burst peak=%.2f".format(burstPeak))
+            burstPeak = 0f
+        }
+
+        recentScores.addLast(score)
+        while (recentScores.size > SMOOTHING_FRAMES) recentScores.removeFirst()
+        val sustained = recentScores.size == SMOOTHING_FRAMES &&
+            recentScores.sum() / SMOOTHING_FRAMES >= SUSTAINED_THRESHOLD
+        if (score < STRONG_THRESHOLD && !sustained) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTriggerAt < REFRACTORY_MS) return
+        lastTriggerAt = now
+        recentScores.clear()
+        onWake(score)
+    }
+
+    private fun onWake(score: Float) {
+        Log.i(TAG, "WAKE detected (score=%.2f) cooling=%s".format(score, cooling))
         if (cooling) return
         cooling = true
 
@@ -154,6 +196,9 @@ class WakeWordService : Service() {
         if (paused) return
         paused = true
         runCatching { engine?.stop() }
+        recentScores.clear()
+        inBurst = false
+        burstPeak = 0f
         Log.i(TAG, "wake paused (mic released)")
     }
 
@@ -180,8 +225,21 @@ class WakeWordService : Service() {
         private const val CHANNEL_WAKE = "jarvis_wake_alert"
         private const val NOTIF_ONGOING = 1001
         private const val NOTIF_WAKE = 1002
-        private const val DETECTION_THRESHOLD = 0.5f
-        private const val COOLDOWN_MS = 1500L
+
+        // --- detection sensitivity (driven from the raw scores flow) ---
+        // Model threshold kept high so the library's built-in detection/logging stays
+        // dormant; we decide from `scores` below.
+        private const val MODEL_THRESHOLD = 0.95f
+        // Fire on a single strong frame (preserves the prior 0.5 behaviour, so recall
+        // never regresses)...
+        private const val STRONG_THRESHOLD = 0.5f
+        // ...or on a sustained moderate average over the smoothing window (the new, more
+        // forgiving path that catches near-misses).
+        private const val SUSTAINED_THRESHOLD = 0.35f
+        private const val SMOOTHING_FRAMES = 3 // ~0.24 s at 80 ms/frame
+        private const val REFRACTORY_MS = 2500L // ignore re-triggers right after a fire
+        private const val BURST_FLOOR = 0.1f // score above which a "voice burst" is in progress
+        private const val COOLDOWN_MS = 1500L // engine `detections` cooldown (unused now, harmless)
 
         @Volatile private var instance: WakeWordService? = null
 
