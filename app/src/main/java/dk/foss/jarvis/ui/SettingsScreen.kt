@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +39,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dk.foss.jarvis.data.SettingsStore
+import dk.foss.jarvis.hermes.HermesClient
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -50,15 +53,24 @@ fun SettingsScreen(onBack: () -> Unit) {
     var baseUrl by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var model by remember { mutableStateOf(SettingsStore.DEFAULT_MODEL) }
+    var elevenKey by remember { mutableStateOf("") }
+    var elevenVoice by remember { mutableStateOf(SettingsStore.DEFAULT_ELEVEN_VOICE) }
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+
+    suspend fun persist() {
+        store.updateConnection(baseUrl, apiKey, model)
+        store.updateVoice(elevenKey, elevenVoice)
+    }
 
     LaunchedEffect(Unit) {
         val s = store.settings.first()
         baseUrl = s.baseUrl
         apiKey = s.apiKey
         model = s.model
+        elevenKey = s.elevenKey
+        elevenVoice = s.elevenVoiceId
         loaded = true
     }
 
@@ -68,7 +80,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        scope.launch { store.update(baseUrl, apiKey, model) }
+                        scope.launch { persist() }
                         onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -96,7 +108,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
-
             OutlinedTextField(
                 value = apiKey,
                 onValueChange = { apiKey = it; status = null },
@@ -105,7 +116,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
             )
-
             OutlinedTextField(
                 value = model,
                 onValueChange = { model = it },
@@ -113,15 +123,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-
             Button(
                 onClick = {
                     scope.launch {
-                        store.update(baseUrl, apiKey, model)
+                        persist()
                         testing = true
                         status = "Testing…"
                         val s = store.settings.first()
-                        val result = dk.foss.jarvis.hermes.HermesClient(s.baseUrl, s.apiKey).testConnection()
+                        val result = HermesClient(s.baseUrl, s.apiKey).testConnection()
                         testing = false
                         status = result.fold(
                             onSuccess = { ids ->
@@ -135,19 +144,37 @@ fun SettingsScreen(onBack: () -> Unit) {
                 enabled = loaded && !testing && baseUrl.isNotBlank() && apiKey.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (testing) {
-                    CircularProgressIndicator(Modifier.padding(end = 8.dp), strokeWidth = 2.dp)
-                }
+                if (testing) CircularProgressIndicator(Modifier.size(18.dp).padding(end = 8.dp), strokeWidth = 2.dp)
                 Text("Save & test connection")
             }
-
             status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 
+            Divider(Modifier.padding(vertical = 8.dp))
+            Text("Voice (optional)", style = MaterialTheme.typography.titleMedium)
             Text(
-                "System integration",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 12.dp),
+                "Leave blank to use your phone's built-in voice. Set an ElevenLabs key " +
+                    "for premium speech.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            OutlinedTextField(
+                value = elevenKey,
+                onValueChange = { elevenKey = it },
+                label = { Text("ElevenLabs API key") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = elevenVoice,
+                onValueChange = { elevenVoice = it },
+                label = { Text("ElevenLabs voice ID") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Divider(Modifier.padding(vertical = 8.dp))
+            Text("System integration", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Set Jarvis as your device's digital assistant to launch it with the " +
                     "assist gesture (long-press the power/home button).",
@@ -165,9 +192,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 }
 
 private fun openAssistantSettings(context: Context) {
-    val intent = Intent(AndroidSettings.ACTION_VOICE_INPUT_SETTINGS).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
+    val intent = Intent(AndroidSettings.ACTION_VOICE_INPUT_SETTINGS)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }.onFailure {
         runCatching {
             context.startActivity(
