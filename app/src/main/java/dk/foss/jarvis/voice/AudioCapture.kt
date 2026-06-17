@@ -7,6 +7,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
@@ -91,7 +92,12 @@ class AudioCapture(private val context: Context) {
 
                 record.stop()
 
-                if (!speechStarted || pcm.size() == 0) {
+                // Require enough *real* speech before transcribing, else treat as
+                // no-speech. Stops ambient noise/silence blips from being sent to
+                // Scribe (which hallucinates phantom phrases on near-silence).
+                val enough = speechStarted && pcm.size() >= MIN_SPEECH_BYTES
+                Log.d(TAG, "capture done: speechStarted=$speechStarted bytes=${pcm.size()} -> ${if (enough) "transcribe" else "no-speech"}")
+                if (!enough) {
                     post { onResult(null) }
                 } else {
                     val file = writeWav(pcm.toByteArray())
@@ -160,12 +166,14 @@ class AudioCapture(private val context: Context) {
     private fun post(block: () -> Unit) = main.post(block)
 
     private companion object {
+        const val TAG = "JarvisStt"
         const val SAMPLE_RATE = 16000
         const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
-        const val SPEECH_RMS = 700.0      // RMS above this = speech
-        const val END_SILENCE_MS = 1000   // trailing silence that ends a turn
-        const val NO_SPEECH_MS = 7000     // give up if nobody speaks
-        const val MAX_MS = 20000          // hard cap on a single utterance
+        const val SPEECH_RMS = 1000.0     // RMS above this = speech (higher = less noise-trigger)
+        const val END_SILENCE_MS = 1800   // trailing silence that ends a turn (allows mid-sentence pauses)
+        const val NO_SPEECH_MS = 8000     // give up if nobody speaks
+        const val MAX_MS = 30000          // hard cap on a single utterance
+        const val MIN_SPEECH_BYTES = SAMPLE_RATE * 2 * 400 / 1000 // ~400ms of real speech required
     }
 }

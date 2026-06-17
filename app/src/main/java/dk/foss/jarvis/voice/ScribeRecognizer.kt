@@ -1,6 +1,7 @@
 package dk.foss.jarvis.voice
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +40,7 @@ class ScribeRecognizer(
                         runCatching { file.delete() }
                         result.fold(
                             onSuccess = { text ->
+                                Log.i("JarvisStt", "scribe transcript=\"$text\"")
                                 if (text.isBlank()) listener.onError("No speech heard", transient = false)
                                 else listener.onFinal(text)
                             },
