@@ -103,7 +103,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             override fun onDelta(textDelta: String) = main.post { reply.value += textDelta }.let {}
             override fun onSessionId(id: String) { sessionId = id }
             override fun onComplete() = main.post {
-                if (state.value == ConvState.Thinking || state.value == ConvState.Speaking) {
+                // Only act while still thinking — guards against any stray double-fire
+                // and against completion arriving after the user already moved on.
+                if (state.value == ConvState.Thinking) {
                     val finalReply = reply.value
                     if (finalReply.isNotBlank()) {
                         history.add(ChatMessage("assistant", finalReply))

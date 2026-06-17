@@ -54,6 +54,10 @@ class HermesClient(
             .post(body.toRequestBody(JSON_MEDIA))
         if (!sessionId.isNullOrEmpty()) builder.addHeader("X-Hermes-Session-Id", sessionId)
 
+        // The stream signals end twice (the "[DONE]" event AND onClosed) — make sure
+        // the terminal callback fires exactly once.
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+
         val listener = object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) {
                 response.header("X-Hermes-Session-Id")?.let { cb.onSessionId(it) }
@@ -61,7 +65,7 @@ class HermesClient(
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data.isBlank() || data == "[DONE]") {
-                    if (data == "[DONE]") cb.onComplete()
+                    if (data == "[DONE]" && finished.compareAndSet(false, true)) cb.onComplete()
                     return
                 }
                 try {
@@ -74,10 +78,11 @@ class HermesClient(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                cb.onComplete()
+                if (finished.compareAndSet(false, true)) cb.onComplete()
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                if (!finished.compareAndSet(false, true)) return
                 val msg = when {
                     response != null && !response.isSuccessful -> {
                         val detail = runCatching { response.body?.string() }.getOrNull()?.take(300)
