@@ -60,6 +60,7 @@ import dk.foss.jarvis.hermes.HermesClient
 import dk.foss.jarvis.wake.WakeWordService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @OptIn(ExperimentalMaterial3Api::class)

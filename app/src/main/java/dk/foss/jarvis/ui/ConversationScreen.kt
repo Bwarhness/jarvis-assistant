@@ -157,10 +157,18 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
                     )
                     ConvState.Listening -> ListeningContent(
                         transcript = transcript,
+                        onMicTap = {
+                            if (hasPermission) vm.onMicTap()
+                            else permLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
                     )
                     ConvState.Thinking -> ThinkingContent(
                         transcript = transcript,
                         stalled = stalled,
+                        onMicTap = {
+                            if (hasPermission) vm.onMicTap()
+                            else permLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
                     )
                     ConvState.Speaking -> SpeakingContent(
                         segments = segments,
@@ -171,7 +179,6 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
                             if (hasPermission) vm.onMicTap()
                             else permLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         },
-                        onExit = onExit,
                     )
                 }
             }
@@ -281,7 +288,7 @@ private fun IdleContent(hasPermission: Boolean, onMicTap: () -> Unit) {
 }
 
 @Composable
-private fun ListeningContent(transcript: String) {
+private fun ListeningContent(transcript: String, onMicTap: () -> Unit) {
     // Blinking caret
     val transition = rememberInfiniteTransition(label = "caret")
     val caretAlpha by transition.animateFloat(
@@ -294,45 +301,54 @@ private fun ListeningContent(transcript: String) {
         label = "caretBlink",
     )
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        StatusTag("LISTENING", JarvisColors.Cyan)
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            StatusTag("LISTENING", JarvisColors.Cyan)
 
-        Spacer(Modifier.height(32.dp))
-
-        PulseRings {
-            Waveform(barCount = 18, barWidth = 4.dp, minH = 14.dp, maxH = 56.dp)
-        }
-
-        if (transcript.isNotEmpty()) {
             Spacer(Modifier.height(32.dp))
-            Text(
-                text = transcript,
-                fontFamily = SpaceGrotesk,
-                fontWeight = FontWeight.Normal,
-                fontSize = 19.sp,
-                color = JarvisColors.TextPrimaryAlpha,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            // Blinking caret
-            Box(
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .width(2.dp)
-                    .height(20.sp.value.dp)
-                    .alpha(caretAlpha)
-                    .background(JarvisColors.Cyan),
-            )
+
+            PulseRings {
+                Waveform(barCount = 18, barWidth = 4.dp, minH = 14.dp, maxH = 56.dp)
+            }
+
+            if (transcript.isNotEmpty()) {
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    text = transcript,
+                    fontFamily = SpaceGrotesk,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 19.sp,
+                    color = JarvisColors.TextPrimaryAlpha,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // Blinking caret
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .width(2.dp)
+                        .height(20.sp.value.dp)
+                        .alpha(caretAlpha)
+                        .background(JarvisColors.Cyan),
+                )
+            }
         }
+
+        MicFab(
+            onMicTap = onMicTap,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
+        )
     }
 }
 
 @Composable
-private fun ThinkingContent(transcript: String, stalled: Boolean) {
+private fun ThinkingContent(transcript: String, stalled: Boolean, onMicTap: () -> Unit) {
     // Blinking dots
     val transition = rememberInfiniteTransition(label = "blink")
     val dot1 by transition.animateFloat(
@@ -363,47 +379,56 @@ private fun ThinkingContent(transcript: String, stalled: Boolean) {
         label = "dot3",
     )
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        StatusTag(
-            text = if (stalled) "WORKING" else "THINKING",
-            color = JarvisColors.ThinkBlue,
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        ThinkingOrbs()
-
-        if (transcript.isNotEmpty()) {
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = "\u201C$transcript\u201D",
-                fontFamily = SpaceGrotesk,
-                fontWeight = FontWeight.Normal,
-                fontSize = 18.sp,
-                color = JarvisColors.TextPrimary.copy(alpha = 0.8f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Three blinking dots
-        Box(
-            contentAlignment = Alignment.Center,
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            androidx.compose.foundation.layout.Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            StatusTag(
+                text = if (stalled) "WORKING" else "THINKING",
+                color = JarvisColors.ThinkBlue,
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            ThinkingOrbs()
+
+            if (transcript.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = "\u201C$transcript\u201D",
+                    fontFamily = SpaceGrotesk,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 18.sp,
+                    color = JarvisColors.TextPrimary.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Three blinking dots
+            Box(
+                contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(6.dp).alpha(dot1).background(JarvisColors.ThinkBlue, CircleShape))
-                Box(Modifier.size(6.dp).alpha(dot2).background(JarvisColors.ThinkBlue, CircleShape))
-                Box(Modifier.size(6.dp).alpha(dot3).background(JarvisColors.ThinkBlue, CircleShape))
+                androidx.compose.foundation.layout.Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(Modifier.size(6.dp).alpha(dot1).background(JarvisColors.ThinkBlue, CircleShape))
+                    Box(Modifier.size(6.dp).alpha(dot2).background(JarvisColors.ThinkBlue, CircleShape))
+                    Box(Modifier.size(6.dp).alpha(dot3).background(JarvisColors.ThinkBlue, CircleShape))
+                }
             }
         }
+
+        MicFab(
+            onMicTap = onMicTap,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
+        )
     }
 }
 
@@ -414,7 +439,6 @@ private fun SpeakingContent(
     pendingText: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onMicTap: () -> Unit,
-    onExit: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -478,50 +502,45 @@ private fun SpeakingContent(
             }
         }
 
-        // Bottom glowing mic FAB
-        Box(
+        MicFab(
+            onMicTap = onMicTap,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp),
+        )
+    }
+}
+
+@Composable
+private fun MicFab(onMicTap: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .drawBehind {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                JarvisColors.Blue.copy(alpha = 0.7f),
+                                JarvisColors.Blue.copy(alpha = 0.3f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    )
+                }
+                .clip(CircleShape)
+                .background(JarvisColors.Blue.copy(alpha = 0.8f))
+                .clickable { onMicTap() },
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .drawBehind {
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    JarvisColors.Blue.copy(alpha = 0.7f),
-                                    JarvisColors.Blue.copy(alpha = 0.3f),
-                                    Color.Transparent,
-                                ),
-                            ),
-                        )
-                    }
-                    .clip(CircleShape)
-                    .background(JarvisColors.Blue.copy(alpha = 0.8f))
-                    .clickable { onMicTap() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Default.Mic,
-                    contentDescription = "Microphone",
-                    modifier = Modifier.size(32.dp),
-                    tint = Color.White,
-                )
-            }
-        }
-
-        // Top-right close button
-        IconButton(
-            onClick = onExit,
-            modifier = Modifier.align(Alignment.TopEnd),
-        ) {
             Icon(
-                Icons.Default.Close,
-                contentDescription = "Close",
-                tint = JarvisColors.TextPrimary.copy(alpha = 0.7f),
+                Icons.Default.Mic,
+                contentDescription = "Microphone",
+                modifier = Modifier.size(32.dp),
+                tint = Color.White,
             )
         }
     }
