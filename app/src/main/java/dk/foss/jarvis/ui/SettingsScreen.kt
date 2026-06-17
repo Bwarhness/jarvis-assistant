@@ -1,10 +1,16 @@
 package dk.foss.jarvis.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings as AndroidSettings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.core.content.ContextCompat
+import dk.foss.jarvis.wake.WakeWordService
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -55,6 +65,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var model by remember { mutableStateOf(SettingsStore.DEFAULT_MODEL) }
     var elevenKey by remember { mutableStateOf("") }
     var elevenVoice by remember { mutableStateOf(SettingsStore.DEFAULT_ELEVEN_VOICE) }
+    var wakeEnabled by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -64,6 +75,37 @@ fun SettingsScreen(onBack: () -> Unit) {
         store.updateVoice(elevenKey, elevenVoice)
     }
 
+    fun enableWake() {
+        scope.launch { store.updateWake(true) }
+        WakeWordService.start(context)
+        wakeEnabled = true
+    }
+
+    val wakePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants[Manifest.permission.RECORD_AUDIO] == true) enableWake()
+    }
+
+    fun toggleWake(on: Boolean) {
+        if (on) {
+            val needed = buildList {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED
+                ) add(Manifest.permission.RECORD_AUDIO)
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                ) add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (needed.isEmpty()) enableWake() else wakePermLauncher.launch(needed.toTypedArray())
+        } else {
+            scope.launch { store.updateWake(false) }
+            WakeWordService.stop(context)
+            wakeEnabled = false
+        }
+    }
+
     LaunchedEffect(Unit) {
         val s = store.settings.first()
         baseUrl = s.baseUrl
@@ -71,6 +113,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         model = s.model
         elevenKey = s.elevenKey
         elevenVoice = s.elevenVoiceId
+        wakeEnabled = s.wakeEnabled
         loaded = true
     }
 
@@ -175,6 +218,20 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Divider(Modifier.padding(vertical = 8.dp))
             Text("System integration", style = MaterialTheme.typography.titleMedium)
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("“Hey Jarvis” wake word", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Always-on listening (foreground service). Uses battery + a " +
+                            "persistent notification.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = wakeEnabled, onCheckedChange = { toggleWake(it) })
+            }
+
             Text(
                 "Set Jarvis as your device's digital assistant to launch it with the " +
                     "assist gesture (long-press the power/home button).",

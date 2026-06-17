@@ -17,6 +17,10 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        ndk {
+            // ONNX Runtime ships native libs per-ABI; real phones are ARM.
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
     }
 
     buildTypes {
@@ -66,6 +70,7 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp-sse:4.12.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2'
     implementation 'com.google.android.material:material:1.11.0'
+    implementation 'xyz.rementia:openwakeword:0.1.5' // wake word (package com.rementia.openwakeword.lib)
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }
