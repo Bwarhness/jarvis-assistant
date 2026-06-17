@@ -2,6 +2,7 @@ package dk.foss.jarvis.wake
 
 import android.app.Notification
 import android.app.NotificationChannel
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -82,9 +83,19 @@ class WakeWordService : Service() {
         // Free the mic so conversation mode's recognizer can record, then open the app.
         pauseEngine()
 
-        // Fire a full-screen-intent notification so the activity reliably launches over
-        // the keyguard. A plain startActivity() is often suppressed by the OS when locked.
-        notifyWake()
+        val launch = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(MainActivity.EXTRA_FROM_ASSIST, true)
+        }
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if (km?.isKeyguardLocked == true) {
+            // Locked: a plain startActivity is suppressed, so use a full-screen-intent
+            // notification — the sanctioned way to launch over the keyguard.
+            notifyWake(launch)
+        } else {
+            // Unlocked: launch directly (allowed via SYSTEM_ALERT_WINDOW), no notification noise.
+            runCatching { startActivity(launch) }
+        }
 
         uiScope.launch {
             delay(4000)
@@ -92,27 +103,23 @@ class WakeWordService : Service() {
         }
     }
 
-    private fun notifyWake() {
-        val launch = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(MainActivity.EXTRA_FROM_ASSIST, true)
-        }
+    private fun notifyWake(launch: Intent) {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val contentPi = PendingIntent.getActivity(this, 0, launch, flags)
-        val fullScreenPi = PendingIntent.getActivity(this, 1, launch, flags)
-
+        val pi = PendingIntent.getActivity(this, 1, launch, flags)
         val notif = NotificationCompat.Builder(this, CHANNEL_WAKE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Hey Jarvis")
+            .setContentTitle("Jarvis")
+            .setContentText("Listening…")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
-            .setFullScreenIntent(fullScreenPi, true)
-            .setContentIntent(contentPi)
+            .setFullScreenIntent(pi, true)
+            .setContentIntent(pi)
             .build()
-
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_WAKE, notif)
+        // The full-screen intent launches the activity; clear the shade entry shortly after.
+        uiScope.launch { delay(2000); runCatching { nm.cancel(NOTIF_WAKE) } }
     }
 
     private fun ongoingNotification(): Notification {
