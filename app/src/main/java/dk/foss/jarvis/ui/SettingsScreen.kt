@@ -103,7 +103,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var voicesLoading by remember { mutableStateOf(false) }
     var voicesError by remember { mutableStateOf<String?>(null) }
     var voicesExpanded by remember { mutableStateOf(false) }
-    val previewPlayer = remember { VoicePreviewPlayer() }
+    val previewPlayer = remember { VoicePreviewPlayer(context) }
     var previewRefresh by remember { mutableStateOf(0) }
     var voicesAutoLoaded by remember { mutableStateOf(false) }
 
