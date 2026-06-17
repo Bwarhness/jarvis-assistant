@@ -71,7 +71,11 @@ class MainActivity : ComponentActivity() {
                     Screen.Conversation -> {
                         BackHandler { screen = Screen.Chat }
                         val cvm: ConversationViewModel = viewModel()
-                        ConversationScreen(vm = cvm, onExit = { screen = Screen.Chat })
+                        ConversationScreen(
+                            vm = cvm,
+                            assistTrigger = assistEpoch,
+                            onExit = { screen = Screen.Chat },
+                        )
                     }
                     Screen.History -> {
                         BackHandler { screen = Screen.Chat }

@@ -44,7 +44,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
 @Composable
-fun ConversationScreen(vm: ConversationViewModel, onExit: () -> Unit) {
+fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: () -> Unit) {
     val context = LocalContext.current
     val state by vm.state
     val transcript by vm.transcript
@@ -71,6 +71,14 @@ fun ConversationScreen(vm: ConversationViewModel, onExit: () -> Unit) {
             permLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             vm.startListening()
+        }
+    }
+    // "Hey Jarvis" while already on this screen (idle) re-activates the mic.
+    var lastTrigger by remember { mutableStateOf(assistTrigger) }
+    LaunchedEffect(assistTrigger) {
+        if (assistTrigger != lastTrigger) {
+            lastTrigger = assistTrigger
+            if (hasPermission) vm.startListening()
         }
     }
     // Stop the conversation (and hand the mic back to "Hey Jarvis") when the app is

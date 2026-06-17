@@ -134,7 +134,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             override fun onFinal(text: String) = main.post {
                 if (turn != myTurn) return@post
                 transcript.value = text
-                if (text.isBlank()) state.value = ConvState.Idle else think(text)
+                if (text.isBlank()) goIdle() else think(text)
             }.let {}
 
             override fun onError(message: String, transient: Boolean) = main.post {
@@ -146,7 +146,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                     return@post
                 }
                 error.value = message
-                state.value = ConvState.Idle
+                goIdle()
             }.let {}
         })
     }
@@ -196,7 +196,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 working.value = false
                 stalled.value = false
                 error.value = message
-                state.value = ConvState.Idle
+                goIdle()
             }.let {}
         })
     }
@@ -284,7 +284,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun finishTurn() {
-        if (continuous) startListening() else state.value = ConvState.Idle
+        if (continuous) startListening() else goIdle()
+    }
+
+    /** Go idle and re-arm the wake word so "Hey Jarvis" can restart the conversation. */
+    private fun goIdle() {
+        state.value = ConvState.Idle
+        WakeWordService.resumeListening()
     }
 
     private fun ensureFallback(): TtsEngine? {
@@ -295,7 +301,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onMicTap() {
         when (state.value) {
-            ConvState.Listening -> { turn++; recognizer?.stop(); state.value = ConvState.Idle }
+            ConvState.Listening -> { turn++; recognizer?.stop(); goIdle() }
             else -> startListening()
         }
     }
