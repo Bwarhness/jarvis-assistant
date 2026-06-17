@@ -72,7 +72,11 @@ class WakeWordService : Service() {
             // Threshold is set high so the library's own detection (and its logging) stays
             // quiet — we make the decision ourselves from the raw `scores` flow below.
             val models = listOf(
-                WakeWordModel("hey_jarvis", "hey_jarvis_v0.1.onnx", MODEL_THRESHOLD),
+                // Community model from home-assistant-wakewords-collection — trained on
+                // 25k synthetic examples of "jarvis" / "hey jarvis" with 500k steps.
+                // Much higher recall than the original hey_jarvis_v0.1 (which peaked at
+                // ~0.3-0.45 and often missed). Fallback: hey_jarvis_v0.1.onnx.
+                WakeWordModel("jarvis", "jarvis_v1.onnx", MODEL_THRESHOLD),
             )
             val e = WakeWordEngine(this, models, DetectionMode.SINGLE_BEST, COOLDOWN_MS, engineScope)
             engine = e
@@ -230,13 +234,13 @@ class WakeWordService : Service() {
         // Model threshold kept high so the library's built-in detection/logging stays
         // dormant; we decide from `scores` below.
         private const val MODEL_THRESHOLD = 0.95f
-        // Fire on a single strong frame (preserves the prior 0.5 behaviour, so recall
-        // never regresses)...
-        private const val STRONG_THRESHOLD = 0.5f
-        // ...or on a sustained moderate average over the smoothing window (the new, more
-        // forgiving path that catches near-misses).
-        private const val SUSTAINED_THRESHOLD = 0.35f
-        private const val SMOOTHING_FRAMES = 3 // ~0.24 s at 80 ms/frame
+        // Fire on a single strong frame (lowered from 0.5 — community jarvis_v1 model
+        // scores differently than hey_jarvis_v0.1, peaks are more moderate)...
+        private const val STRONG_THRESHOLD = 0.3f
+        // ...or on a sustained moderate average over the smoothing window (lowered
+        // to catch more near-misses with the new model).
+        private const val SUSTAINED_THRESHOLD = 0.2f
+        private const val SMOOTHING_FRAMES = 5 // ~0.4 s at 80 ms/frame (was 3)
         private const val REFRACTORY_MS = 2500L // ignore re-triggers right after a fire
         private const val BURST_FLOOR = 0.1f // score above which a "voice burst" is in progress
         private const val COOLDOWN_MS = 1500L // engine `detections` cooldown (unused now, harmless)
