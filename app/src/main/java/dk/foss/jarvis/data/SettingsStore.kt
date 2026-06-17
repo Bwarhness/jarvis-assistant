@@ -39,7 +39,9 @@ class SettingsStore(private val context: Context) {
         JarvisSettings(
             baseUrl = p[Keys.BASE_URL] ?: BuildConfig.DEFAULT_BASE_URL,
             apiKey = p[Keys.API_KEY] ?: BuildConfig.DEFAULT_API_KEY,
-            model = (p[Keys.MODEL] ?: "").ifEmpty { DEFAULT_MODEL },
+            // Empty, or the previous default ("kimi-for-coding"), migrates to DEFAULT_MODEL
+            // so existing installs flip to the new model; a deliberately-set model is kept.
+            model = (p[Keys.MODEL] ?: "").let { if (it.isEmpty() || it == LEGACY_MODEL) DEFAULT_MODEL else it },
             elevenKey = (p[Keys.ELEVEN_KEY] ?: "").ifEmpty { BuildConfig.DEFAULT_ELEVEN_KEY },
             elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "")
                 .ifEmpty { BuildConfig.DEFAULT_ELEVEN_VOICE.ifEmpty { DEFAULT_ELEVEN_VOICE } },
@@ -67,7 +69,8 @@ class SettingsStore(private val context: Context) {
     }
 
     companion object {
-        const val DEFAULT_MODEL = "kimi-for-coding"
+        const val DEFAULT_MODEL = "mimo-v2.5-pro-ultraspeed"
+        const val LEGACY_MODEL = "kimi-for-coding" // prior default; migrated to DEFAULT_MODEL
         const val DEFAULT_ELEVEN_VOICE = "JBFqnCBsd6RMkjVDRZzb"
     }
 }
