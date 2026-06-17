@@ -27,8 +27,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val speech = SpeechInput(app)
 
     val state = mutableStateOf(ConvState.Idle)
-    val transcript = mutableStateOf("")   // what the user said
-    val reply = mutableStateOf("")        // what Jarvis is saying
+    val transcript = mutableStateOf("")
+    val reply = mutableStateOf("")
     val error = mutableStateOf<String?>(null)
 
     private var settings: JarvisSettings? = null
@@ -38,6 +38,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var sessionId: String? = null
     private var source: EventSource? = null
     private var continuous = true
+
+    // --- streaming-TTS pipeline ---
+    private val sentenceBuffer = StringBuilder()
+    private val ttsQueue = ArrayDeque<String>()
+    private var speaking = false
+    private var streamDone = false
+    private var turn = 0 // bumped each turn; stale async callbacks check this and bail
 
     init {
         viewModelScope.launch { ensureReady() }
@@ -57,7 +64,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Begin (or restart) listening for the user. Runs on the main dispatcher. */
     fun startListening() {
         viewModelScope.launch {
             ensureReady()
@@ -66,27 +72,40 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 state.value = ConvState.Idle
                 return@launch
             }
-            stopSpeaking()
-            source?.cancel()
-            transcript.value = ""
-            error.value = null
+            beginTurn()
             state.value = ConvState.Listening
             startRecognition()
         }
     }
 
+    /** Start a fresh turn: invalidate in-flight callbacks and clear pipeline state. */
+    private fun beginTurn() {
+        turn++
+        source?.cancel(); source = null
+        runCatching { tts?.stop(); androidFallback?.stop() }
+        ttsQueue.clear()
+        sentenceBuffer.setLength(0)
+        speaking = false
+        streamDone = false
+        transcript.value = ""
+        error.value = null
+    }
+
     private fun startRecognition() {
+        val myTurn = turn
         speech.start(languageTag = null, listener = object : SpeechInput.Listener {
-            override fun onPartial(text: String) = main.post { transcript.value = text }.let {}
-            override fun onFinal(text: String) = main.post {
-                transcript.value = text
-                if (text.isBlank()) {
-                    state.value = ConvState.Idle
-                } else {
-                    think(text)
-                }
+            override fun onPartial(text: String) = main.post {
+                if (turn == myTurn) transcript.value = text
             }.let {}
+
+            override fun onFinal(text: String) = main.post {
+                if (turn != myTurn) return@post
+                transcript.value = text
+                if (text.isBlank()) state.value = ConvState.Idle else think(text)
+            }.let {}
+
             override fun onError(message: String) = main.post {
+                if (turn != myTurn) return@post
                 error.value = message
                 state.value = ConvState.Idle
             }.let {}
@@ -94,87 +113,140 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun think(userText: String) {
+        val myTurn = turn
         state.value = ConvState.Thinking
         reply.value = ""
+        sentenceBuffer.setLength(0)
+        ttsQueue.clear()
+        speaking = false
+        streamDone = false
         history.add(ChatMessage("user", userText))
+
         val s = settings ?: return
         val client = HermesClient(s.baseUrl, s.apiKey)
         source = client.streamChat(history.toList(), s.model, sessionId, object : HermesClient.StreamCallbacks {
-            override fun onDelta(textDelta: String) = main.post { reply.value += textDelta }.let {}
-            override fun onSessionId(id: String) { sessionId = id }
-            override fun onComplete() = main.post {
-                // Only act while still thinking — guards against any stray double-fire
-                // and against completion arriving after the user already moved on.
-                if (state.value == ConvState.Thinking) {
-                    val finalReply = reply.value
-                    if (finalReply.isNotBlank()) {
-                        history.add(ChatMessage("assistant", finalReply))
-                        speak(finalReply)
-                    } else {
-                        state.value = ConvState.Idle
-                    }
-                }
+            override fun onDelta(textDelta: String) = main.post {
+                if (turn == myTurn) onTextDelta(textDelta)
             }.let {}
+
+            override fun onSessionId(id: String) { sessionId = id }
+
+            override fun onComplete() = main.post {
+                if (turn != myTurn) return@post
+                // flush whatever's left as the final sentence
+                val rest = sentenceBuffer.toString().trim()
+                sentenceBuffer.setLength(0)
+                if (rest.isNotEmpty()) enqueueSpeech(rest)
+                if (reply.value.isNotBlank()) history.add(ChatMessage("assistant", reply.value))
+                streamDone = true
+                pump()
+            }.let {}
+
             override fun onError(message: String) = main.post {
+                if (turn != myTurn) return@post
                 error.value = message
                 state.value = ConvState.Idle
             }.let {}
         })
     }
 
-    private fun speak(text: String) {
-        state.value = ConvState.Speaking
-        val primary = tts
-        if (primary == null) { afterSpeak(); return }
-        primary.speak(
-            text = text,
-            onDone = { afterSpeak() },
-            onError = { msg ->
-                // ElevenLabs (or whatever the primary is) failed — fall back to the
-                // phone's built-in TTS so the reply is still spoken.
+    /** A token arrived: show it, and speak as soon as a full sentence is available. */
+    private fun onTextDelta(delta: String) {
+        reply.value += delta
+        sentenceBuffer.append(delta)
+        extractSentences()
+    }
+
+    private fun extractSentences() {
+        while (true) {
+            val s = sentenceBuffer
+            var cut = -1
+            for (i in s.indices) {
+                val c = s[i]
+                if (c == '\n') { cut = i; break }
+                // sentence end only when we already see the following char is whitespace
+                // (so "3.5" or a trailing "." mid-stream isn't split prematurely)
+                if ((c == '.' || c == '!' || c == '?') && i + 1 < s.length && s[i + 1].isWhitespace()) {
+                    cut = i; break
+                }
+            }
+            if (cut < 0 && s.length > 180) { // soft cap so one long clause still starts early
+                val sp = s.lastIndexOf(' ')
+                if (sp > 40) cut = sp
+            }
+            if (cut < 0) break
+            val sentence = s.substring(0, cut + 1).trim()
+            s.delete(0, cut + 1)
+            if (sentence.isNotEmpty()) enqueueSpeech(sentence)
+        }
+    }
+
+    private fun enqueueSpeech(text: String) {
+        ttsQueue.addLast(text)
+        pump()
+    }
+
+    /** Speak queued sentences one after another (the next synthesizes after the prior plays). */
+    private fun pump() {
+        if (speaking) return
+        val next = ttsQueue.removeFirstOrNull()
+        if (next == null) {
+            if (streamDone) finishTurn()
+            return
+        }
+        speaking = true
+        if (state.value != ConvState.Speaking) state.value = ConvState.Speaking
+        val engine = tts ?: ensureFallback()
+        if (engine == null) { speaking = false; return }
+        val myTurn = turn
+        engine.speak(
+            text = next,
+            onDone = { main.post { if (turn == myTurn) { speaking = false; pump() } } },
+            onError = {
+                // premium engine failed on this sentence — say it with on-device TTS, then continue
                 val fb = ensureFallback()
-                if (fb != null && fb !== primary) {
+                if (fb != null && fb !== engine) {
                     fb.speak(
-                        text = text,
-                        onDone = { afterSpeak() },
-                        onError = { fbMsg -> main.post { error.value = fbMsg; state.value = ConvState.Idle } },
+                        text = next,
+                        onDone = { main.post { if (turn == myTurn) { speaking = false; pump() } } },
+                        onError = { main.post { if (turn == myTurn) { speaking = false; pump() } } },
                     )
                 } else {
-                    main.post { error.value = msg; state.value = ConvState.Idle }
+                    main.post { if (turn == myTurn) { speaking = false; pump() } }
                 }
             },
         )
     }
 
-    private fun afterSpeak() = main.post {
+    private fun finishTurn() {
         if (continuous) startListening() else state.value = ConvState.Idle
-    }.let {}
+    }
 
-    /** Lazily build the on-device TTS used as a fallback (or reuse the primary if it already is). */
     private fun ensureFallback(): TtsEngine? {
         (tts as? AndroidTts)?.let { return it }
         if (androidFallback == null) androidFallback = AndroidTts(getApplication(), languageTag = null)
         return androidFallback
     }
 
-    /** Tap behaviour: interrupt whatever is happening and listen again. */
     fun onMicTap() {
         when (state.value) {
-            ConvState.Listening -> { speech.stop(); state.value = ConvState.Idle }
+            ConvState.Listening -> { turn++; speech.stop(); state.value = ConvState.Idle }
             else -> startListening()
         }
     }
 
     fun setContinuous(value: Boolean) { continuous = value }
 
-    private fun stopSpeaking() { runCatching { tts?.stop() } }
-
     fun stopAll() {
         continuous = false
+        turn++
         speech.stop()
-        stopSpeaking()
-        source?.cancel()
-        source = null
+        runCatching { tts?.stop(); androidFallback?.stop() }
+        source?.cancel(); source = null
+        ttsQueue.clear()
+        sentenceBuffer.setLength(0)
+        speaking = false
+        streamDone = false
         state.value = ConvState.Idle
     }
 
