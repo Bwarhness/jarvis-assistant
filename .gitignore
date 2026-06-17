@@ -12,3 +12,6 @@ local.properties
 *.keystore
 secrets.properties
 keys.properties
+
+# Multi-model review artifacts
+.aidelegate/
