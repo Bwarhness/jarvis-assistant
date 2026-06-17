@@ -75,12 +75,12 @@ class SpeechInput(private val context: Context) {
     fun start(languageTag: String?, listener: Listener) {
         current = listener
         val sr = recognizer ?: createRecognizer() ?: run {
-            listener.onError("Speech recognition unavailable")
+            listener.onError("Speech recognition unavailable", transient = false)
             return
         }
         runCatching { sr.cancel() }
         runCatching { sr.startListening(buildIntent(languageTag)) }
-            .onFailure { listener.onError(it.message ?: "Could not start recognition") }
+            .onFailure { listener.onError(it.message ?: "Could not start recognition", transient = true) }
     }
 
     /** Stop the current recognition but keep the recognizer for reuse. */
