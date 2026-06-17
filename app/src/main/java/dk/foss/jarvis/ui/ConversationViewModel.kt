@@ -40,6 +40,12 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     val working = mutableStateOf(false) // Hermes stream still open (response not complete)
     val stalled = mutableStateOf(false) // content paused mid-stream — likely running a tool
 
+    // --- follow-along reply display state ---
+    val segments = androidx.compose.runtime.mutableStateListOf<String>()
+    val speakingIndex = mutableStateOf(-1)
+    val pendingText = mutableStateOf("")
+    private var spokenCount = 0
+
     private var settings: JarvisSettings? = null
     private var tts: TtsEngine? = null
     private var androidFallback: AndroidTts? = null
@@ -130,6 +136,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         sentenceBuffer.setLength(0)
         speaking = false
         streamDone = false
+        segments.clear()
+        speakingIndex.value = -1
+        pendingText.value = ""
+        spokenCount = 0
         transcript.value = ""
         reply.value = ""
         error.value = null
@@ -152,6 +162,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         error.value = null
         working.value = false
         stalled.value = false
+        segments.clear()
+        speakingIndex.value = -1
+        pendingText.value = ""
+        spokenCount = 0
         state.value = ConvState.Idle
     }
 
@@ -217,6 +231,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 val rest = sentenceBuffer.toString().trim()
                 sentenceBuffer.setLength(0)
                 if (rest.isNotEmpty()) enqueueSpeech(rest)
+                pendingText.value = ""
                 if (reply.value.isNotBlank()) repo.addMessage("assistant", reply.value)
                 viewModelScope.launch { repo.persist() }
                 streamDone = true
@@ -239,6 +254,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         reply.value += delta
         sentenceBuffer.append(delta)
         extractSentences()
+        pendingText.value = sentenceBuffer.toString().trim()
         // Content is flowing → not stalled. Re-arm both timers.
         stalled.value = false
         main.removeCallbacks(idleFlush)
@@ -251,6 +267,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         val s = sentenceBuffer.toString().trim()
         if (s.isNotEmpty() && (s.endsWith('.') || s.endsWith('!') || s.endsWith('?'))) {
             sentenceBuffer.setLength(0)
+            pendingText.value = ""
             enqueueSpeech(s)
         }
     }
@@ -281,6 +298,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun enqueueSpeech(text: String) {
         ttsQueue.addLast(text)
+        segments.add(text)
         pump()
     }
 
@@ -293,6 +311,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         speaking = true
+        speakingIndex.value = spokenCount
+        spokenCount++
         if (state.value != ConvState.Speaking) state.value = ConvState.Speaking
         val engine = tts ?: ensureFallback()
         if (engine == null) { speaking = false; return }
@@ -371,6 +391,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         sentenceBuffer.setLength(0)
         speaking = false
         streamDone = false
+        segments.clear()
+        speakingIndex.value = -1
+        pendingText.value = ""
+        spokenCount = 0
         state.value = ConvState.Idle
         // Save the conversation (covers turns that ended in an error/cancel, not just
         // successful replies) before handing the mic back to the wake listener.

@@ -7,14 +7,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
@@ -37,8 +38,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -52,6 +55,11 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
     val error by vm.error
     val working by vm.working
     val stalled by vm.stalled
+
+    val segments = vm.segments
+    val speakingIndex by vm.speakingIndex
+    val pendingText by vm.pendingText
+    val listState = rememberLazyListState()
 
     var hasPermission by remember {
         mutableStateOf(
@@ -83,6 +91,12 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
             if (hasPermission && state == ConvState.Idle) {
                 vm.startListening(fromWake = true)
             }
+        }
+    }
+    // Auto-scroll to keep the currently spoken sentence visible.
+    LaunchedEffect(speakingIndex) {
+        if (speakingIndex in 0 until segments.size) {
+            listState.animateScrollToItem(speakingIndex)
         }
     }
     // Stop the conversation (and hand the mic back to "Hey Jarvis") when the app is
@@ -131,17 +145,46 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
                     )
                 }
                 if (reply.isNotEmpty()) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        // Leave room at the bottom so the last lines clear the mic button.
+                        contentPadding = PaddingValues(bottom = 104.dp),
                     ) {
-                        Text(
-                            text = reply,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        items(segments.size) { i ->
+                            val isSpeaking = i == speakingIndex
+                            Text(
+                                text = segments[i],
+                                style = if (isSpeaking) {
+                                    MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp,
+                                    )
+                                } else {
+                                    MaterialTheme.typography.bodyLarge
+                                },
+                                textAlign = TextAlign.Center,
+                                color = if (isSpeaking) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                        if (pendingText.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = pendingText,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                )
+                            }
+                        }
                     }
                 }
                 error?.let {
