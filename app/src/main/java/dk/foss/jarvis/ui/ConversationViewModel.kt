@@ -245,7 +245,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAll() {
         continuous = false
         turn++
-        speech.stop()
+        speech.release()
         runCatching { tts?.stop(); androidFallback?.stop() }
         source?.cancel(); source = null
         ttsQueue.clear()
@@ -258,7 +258,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        speech.stop()
+        speech.release()
         source?.cancel()
         tts?.shutdown()
         androidFallback?.shutdown()

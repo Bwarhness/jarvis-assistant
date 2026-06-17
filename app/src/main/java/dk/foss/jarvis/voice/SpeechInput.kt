@@ -8,12 +8,14 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
 /**
- * Thin wrapper over Android's on-device [SpeechRecognizer]. All methods must be
- * called on the main thread (SpeechRecognizer requirement).
+ * Wraps Android's [SpeechRecognizer]. A single recognizer instance is reused
+ * across turns — creating/destroying one per listen makes the recognition
+ * service drop its binding (ERROR_SERVER_DISCONNECTED). All calls on the main thread.
  */
 class SpeechInput(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
+    private var current: Listener? = null
 
     interface Listener {
         fun onReady() {}
@@ -25,56 +27,80 @@ class SpeechInput(private val context: Context) {
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
+    private val recognitionListener = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) { current?.onReady() }
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() { current?.onEnd() }
+
+        override fun onError(error: Int) {
+            // A disconnected binding can't be reused — drop it so the next start() rebuilds.
+            if (error == ERROR_SERVER_DISCONNECTED) {
+                runCatching { recognizer?.destroy() }
+                recognizer = null
+            }
+            current?.onError(errorText(error))
+        }
+
+        override fun onResults(results: Bundle?) {
+            val text = results
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                .orEmpty()
+            current?.onFinal(text)
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val text = partialResults
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                .orEmpty()
+            if (text.isNotEmpty()) current?.onPartial(text)
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+    }
+
     fun start(languageTag: String?, listener: Listener) {
-        stop()
-        val sr = SpeechRecognizer.createSpeechRecognizer(context)
-        recognizer = sr
-        sr.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = listener.onReady()
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() = listener.onEnd()
-            override fun onError(error: Int) = listener.onError(errorText(error))
-            override fun onResults(results: Bundle?) {
-                val text = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    .orEmpty()
-                listener.onFinal(text)
-            }
+        current = listener
+        val sr = recognizer ?: createRecognizer() ?: run {
+            listener.onError("Speech recognition unavailable")
+            return
+        }
+        runCatching { sr.cancel() }
+        runCatching { sr.startListening(buildIntent(languageTag)) }
+            .onFailure { listener.onError(it.message ?: "Could not start recognition") }
+    }
 
-            override fun onPartialResults(partialResults: Bundle?) {
-                val text = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    .orEmpty()
-                if (text.isNotEmpty()) listener.onPartial(text)
-            }
+    /** Stop the current recognition but keep the recognizer for reuse. */
+    fun stop() {
+        current = null
+        runCatching { recognizer?.cancel() }
+    }
 
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
+    /** Fully tear down (call when leaving conversation / on cleanup). */
+    fun release() {
+        current = null
+        runCatching { recognizer?.destroy() }
+        recognizer = null
+    }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+    private fun createRecognizer(): SpeechRecognizer? {
+        if (!isAvailable()) return null
+        return SpeechRecognizer.createSpeechRecognizer(context).also {
+            it.setRecognitionListener(recognitionListener)
+            recognizer = it
+        }
+    }
+
+    private fun buildIntent(languageTag: String?): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-            // NOTE: we intentionally do NOT force EXTRA_PREFER_OFFLINE — forcing
-            // offline yields ERROR_LANGUAGE_NOT_SUPPORTED (12) when the device has
-            // no offline model for the language. Let the recognizer choose.
             if (!languageTag.isNullOrEmpty()) putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
         }
-        sr.startListening(intent)
-    }
-
-    fun stop() {
-        recognizer?.let { r ->
-            runCatching { r.stopListening() }
-            runCatching { r.cancel() }
-            runCatching { r.destroy() }
-        }
-        recognizer = null
-    }
 
     private fun errorText(code: Int): String = when (code) {
         SpeechRecognizer.ERROR_AUDIO -> "Audio error"
@@ -92,5 +118,9 @@ class SpeechInput(private val context: Context) {
         13 -> "Voice language unavailable"
         14 -> "Can't verify voice-language support"
         else -> "Recognition error ($code)"
+    }
+
+    private companion object {
+        const val ERROR_SERVER_DISCONNECTED = 11
     }
 }
