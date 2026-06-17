@@ -21,11 +21,17 @@ class SpeechInput(private val context: Context) {
         fun onReady() {}
         fun onPartial(text: String) {}
         fun onFinal(text: String) {}
-        fun onError(message: String) {}
+        /** [transient] = a cold-start/mic-handoff hiccup worth retrying (not "you said nothing"). */
+        fun onError(message: String, transient: Boolean) {}
         fun onEnd() {}
     }
 
     fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+
+    /** Bind the recognition service ahead of time so the first listen isn't cold. */
+    fun prewarm() {
+        if (recognizer == null) createRecognizer()
+    }
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { current?.onReady() }
@@ -40,7 +46,11 @@ class SpeechInput(private val context: Context) {
                 runCatching { recognizer?.destroy() }
                 recognizer = null
             }
-            current?.onError(errorText(error))
+            val transient = error == SpeechRecognizer.ERROR_AUDIO ||
+                error == SpeechRecognizer.ERROR_CLIENT ||
+                error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                error == ERROR_SERVER_DISCONNECTED
+            current?.onError(errorText(error), transient)
         }
 
         override fun onResults(results: Bundle?) {

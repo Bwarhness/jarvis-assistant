@@ -46,8 +46,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var speaking = false
     private var streamDone = false
     private var turn = 0 // bumped each turn; stale async callbacks check this and bail
+    private var retriedThisTurn = false
 
     init {
+        speech.prewarm() // bind the recognizer early so the first listen isn't cold
         viewModelScope.launch { ensureReady() }
     }
 
@@ -68,6 +70,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun startListening() {
         // A conversation auto-continues: after Jarvis speaks it listens again.
         continuous = true
+        retriedThisTurn = false
         // Free the mic from the always-on wake listener so STT can record.
         WakeWordService.pauseListening()
         viewModelScope.launch {
@@ -109,8 +112,14 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 if (text.isBlank()) state.value = ConvState.Idle else think(text)
             }.let {}
 
-            override fun onError(message: String) = main.post {
+            override fun onError(message: String, transient: Boolean) = main.post {
                 if (turn != myTurn) return@post
+                // Cold-start / mic-handoff hiccup right after a wake — retry once.
+                if (transient && !retriedThisTurn) {
+                    retriedThisTurn = true
+                    main.postDelayed({ if (turn == myTurn) startRecognition() }, 450)
+                    return@post
+                }
                 error.value = message
                 state.value = ConvState.Idle
             }.let {}
