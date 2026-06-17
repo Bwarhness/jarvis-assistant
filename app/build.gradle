@@ -12,6 +12,8 @@ if (keysFile.exists()) keysProps.load(new FileInputStream(keysFile))
 def jvEscape = { String s -> (s ?: "").replace("\\", "\\\\").replace("\"", "\\\"") }
 def defBaseUrl = jvEscape(keysProps.getProperty("JARVIS_BASE_URL", ""))
 def defApiKey = jvEscape(keysProps.getProperty("JARVIS_API_KEY", ""))
+def defElevenKey = jvEscape(keysProps.getProperty("JARVIS_ELEVEN_KEY", ""))
+def defElevenVoice = jvEscape(keysProps.getProperty("JARVIS_ELEVEN_VOICE", ""))
 
 android {
     namespace 'dk.foss.jarvis'
@@ -32,6 +34,8 @@ android {
         }
         buildConfigField "String", "DEFAULT_BASE_URL", "\"${defBaseUrl}\""
         buildConfigField "String", "DEFAULT_API_KEY", "\"${defApiKey}\""
+        buildConfigField "String", "DEFAULT_ELEVEN_KEY", "\"${defElevenKey}\""
+        buildConfigField "String", "DEFAULT_ELEVEN_VOICE", "\"${defElevenVoice}\""
     }
 
     buildTypes {

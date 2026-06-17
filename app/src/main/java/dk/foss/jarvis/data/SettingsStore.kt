@@ -40,8 +40,9 @@ class SettingsStore(private val context: Context) {
             baseUrl = p[Keys.BASE_URL] ?: BuildConfig.DEFAULT_BASE_URL,
             apiKey = p[Keys.API_KEY] ?: BuildConfig.DEFAULT_API_KEY,
             model = (p[Keys.MODEL] ?: "").ifEmpty { DEFAULT_MODEL },
-            elevenKey = p[Keys.ELEVEN_KEY] ?: "",
-            elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "").ifEmpty { DEFAULT_ELEVEN_VOICE },
+            elevenKey = (p[Keys.ELEVEN_KEY] ?: "").ifEmpty { BuildConfig.DEFAULT_ELEVEN_KEY },
+            elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "")
+                .ifEmpty { BuildConfig.DEFAULT_ELEVEN_VOICE.ifEmpty { DEFAULT_ELEVEN_VOICE } },
             wakeEnabled = p[Keys.WAKE_ENABLED] ?: false,
         )
     }
