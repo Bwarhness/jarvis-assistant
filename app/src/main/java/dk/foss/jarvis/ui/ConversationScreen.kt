@@ -67,6 +67,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
     }
 
     LaunchedEffect(Unit) {
+        vm.resetView() // clear any stale exchange from a previous screen visit
         if (!hasPermission) {
             permLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {

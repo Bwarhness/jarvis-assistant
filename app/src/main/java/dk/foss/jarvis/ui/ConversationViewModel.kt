@@ -121,7 +121,25 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         speaking = false
         streamDone = false
         transcript.value = ""
+        reply.value = ""
         error.value = null
+    }
+
+    /**
+     * Reset the on-screen display when the voice screen is (re)opened, so it reflects
+     * the current conversation rather than a stale previous exchange (the VM is retained
+     * across screen visits while the shared conversation may have been replaced).
+     */
+    fun resetView() {
+        turn++ // invalidate any in-flight callbacks from a prior screen visit
+        runCatching { recognizer?.stop() }
+        source?.cancel(); source = null
+        transcript.value = ""
+        reply.value = ""
+        error.value = null
+        working.value = false
+        stalled.value = false
+        state.value = ConvState.Idle
     }
 
     private fun startRecognition() {
