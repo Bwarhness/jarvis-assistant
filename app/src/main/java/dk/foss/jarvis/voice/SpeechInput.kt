@@ -8,28 +8,19 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
 /**
- * Wraps Android's [SpeechRecognizer]. A single recognizer instance is reused
- * across turns — creating/destroying one per listen makes the recognition
- * service drop its binding (ERROR_SERVER_DISCONNECTED). All calls on the main thread.
+ * On-device speech recognition via Android's [SpeechRecognizer]. A single
+ * recognizer instance is reused across turns (create/destroy churn makes the
+ * recognition service drop its binding → ERROR_SERVER_DISCONNECTED). Main thread only.
  */
-class SpeechInput(private val context: Context) {
+class SpeechInput(private val context: Context) : VoiceRecognizer {
 
     private var recognizer: SpeechRecognizer? = null
-    private var current: Listener? = null
+    private var current: VoiceRecognizer.Listener? = null
 
-    interface Listener {
-        fun onReady() {}
-        fun onPartial(text: String) {}
-        fun onFinal(text: String) {}
-        /** [transient] = a cold-start/mic-handoff hiccup worth retrying (not "you said nothing"). */
-        fun onError(message: String, transient: Boolean) {}
-        fun onEnd() {}
-    }
-
-    fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
+    override fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
     /** Bind the recognition service ahead of time so the first listen isn't cold. */
-    fun prewarm() {
+    override fun prewarm() {
         if (recognizer == null) createRecognizer()
     }
 
@@ -41,7 +32,6 @@ class SpeechInput(private val context: Context) {
         override fun onEndOfSpeech() { current?.onEnd() }
 
         override fun onError(error: Int) {
-            // A disconnected binding can't be reused — drop it so the next start() rebuilds.
             if (error == ERROR_SERVER_DISCONNECTED) {
                 runCatching { recognizer?.destroy() }
                 recognizer = null
@@ -72,7 +62,7 @@ class SpeechInput(private val context: Context) {
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
-    fun start(languageTag: String?, listener: Listener) {
+    override fun start(languageTag: String?, listener: VoiceRecognizer.Listener) {
         current = listener
         val sr = recognizer ?: createRecognizer() ?: run {
             listener.onError("Speech recognition unavailable", transient = false)
@@ -83,14 +73,12 @@ class SpeechInput(private val context: Context) {
             .onFailure { listener.onError(it.message ?: "Could not start recognition", transient = true) }
     }
 
-    /** Stop the current recognition but keep the recognizer for reuse. */
-    fun stop() {
+    override fun stop() {
         current = null
         runCatching { recognizer?.cancel() }
     }
 
-    /** Fully tear down (call when leaving conversation / on cleanup). */
-    fun release() {
+    override fun release() {
         current = null
         runCatching { recognizer?.destroy() }
         recognizer = null

@@ -12,8 +12,10 @@ import dk.foss.jarvis.hermes.ChatMessage
 import dk.foss.jarvis.hermes.HermesClient
 import dk.foss.jarvis.voice.AndroidTts
 import dk.foss.jarvis.voice.ElevenLabsTts
+import dk.foss.jarvis.voice.ScribeRecognizer
 import dk.foss.jarvis.voice.SpeechInput
 import dk.foss.jarvis.voice.TtsEngine
+import dk.foss.jarvis.voice.VoiceRecognizer
 import dk.foss.jarvis.wake.WakeWordService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -25,7 +27,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settingsStore = SettingsStore(app)
     private val main = Handler(Looper.getMainLooper())
-    private val speech = SpeechInput(app)
+    private var recognizer: VoiceRecognizer? = null
 
     val state = mutableStateOf(ConvState.Idle)
     val transcript = mutableStateOf("")
@@ -49,21 +51,26 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var retriedThisTurn = false
 
     init {
-        speech.prewarm() // bind the recognizer early so the first listen isn't cold
         viewModelScope.launch { ensureReady() }
     }
 
     private suspend fun ensureReady() {
-        if (settings == null) {
-            val s = settingsStore.settings.first()
-            settings = s
-            if (tts == null) {
-                tts = if (s.useElevenLabs) {
-                    ElevenLabsTts(getApplication(), s.elevenKey, s.elevenVoiceId)
-                } else {
-                    AndroidTts(getApplication(), languageTag = null)
-                }
+        val s = settings ?: settingsStore.settings.first().also { settings = it }
+        if (tts == null) {
+            tts = if (s.useElevenLabs) {
+                ElevenLabsTts(getApplication(), s.elevenKey, s.elevenVoiceId)
+            } else {
+                AndroidTts(getApplication(), languageTag = null)
             }
+        }
+        if (recognizer == null) {
+            // With an ElevenLabs key, use Scribe (far better accuracy); else on-device.
+            recognizer = if (s.useElevenLabs) {
+                ScribeRecognizer(getApplication(), s.elevenKey, languageCode = null)
+            } else {
+                SpeechInput(getApplication())
+            }
+            recognizer?.prewarm()
         }
     }
 
@@ -101,9 +108,14 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startRecognition() {
         val myTurn = turn
-        speech.start(languageTag = null, listener = object : SpeechInput.Listener {
+        recognizer?.start(languageTag = null, listener = object : VoiceRecognizer.Listener {
             override fun onPartial(text: String) = main.post {
                 if (turn == myTurn) transcript.value = text
+            }.let {}
+
+            override fun onEnd() = main.post {
+                // Recording finished — show "Thinking" while Scribe transcribes.
+                if (turn == myTurn && state.value == ConvState.Listening) state.value = ConvState.Thinking
             }.let {}
 
             override fun onFinal(text: String) = main.post {
@@ -244,7 +256,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onMicTap() {
         when (state.value) {
-            ConvState.Listening -> { turn++; speech.stop(); state.value = ConvState.Idle }
+            ConvState.Listening -> { turn++; recognizer?.stop(); state.value = ConvState.Idle }
             else -> startListening()
         }
     }
@@ -254,7 +266,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAll() {
         continuous = false
         turn++
-        speech.release()
+        recognizer?.release()
+        recognizer = null
         runCatching { tts?.stop(); androidFallback?.stop() }
         source?.cancel(); source = null
         ttsQueue.clear()
@@ -267,7 +280,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        speech.release()
+        recognizer?.release()
         source?.cancel()
         tts?.shutdown()
         androidFallback?.shutdown()
