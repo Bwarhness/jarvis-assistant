@@ -78,6 +78,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
     LaunchedEffect(assistTrigger) {
         if (assistTrigger != lastTrigger) {
             lastTrigger = assistTrigger
+            android.util.Log.i("JarvisConv", "assistTrigger fired ($assistTrigger) -> startListening")
             if (hasPermission) vm.startListening()
         }
     }

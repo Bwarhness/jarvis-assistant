@@ -3,6 +3,7 @@ package dk.foss.jarvis.ui
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -84,6 +85,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startListening() {
+        Log.i(TAG, "startListening (continuous=$continuous)")
         // A conversation auto-continues: after Jarvis speaks it listens again.
         continuous = true
         retriedThisTurn = false
@@ -133,12 +135,14 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
             override fun onFinal(text: String) = main.post {
                 if (turn != myTurn) return@post
+                Log.i(TAG, "onFinal text=\"$text\"")
                 transcript.value = text
                 if (text.isBlank()) goIdle() else think(text)
             }.let {}
 
             override fun onError(message: String, transient: Boolean) = main.post {
                 if (turn != myTurn) return@post
+                Log.i(TAG, "rec onError=\"$message\" transient=$transient retried=$retriedThisTurn")
                 // Cold-start / mic-handoff hiccup right after a wake — retry once.
                 if (transient && !retriedThisTurn) {
                     retriedThisTurn = true
@@ -289,6 +293,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Go idle and re-arm the wake word so "Hey Jarvis" can restart the conversation. */
     private fun goIdle() {
+        Log.i(TAG, "goIdle -> resume wake")
         state.value = ConvState.Idle
         WakeWordService.resumeListening()
     }
@@ -338,6 +343,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        const val TAG = "JarvisConv"
         const val IDLE_FLUSH_MS = 350L
         const val STALL_MS = 800L
     }
