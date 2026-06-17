@@ -58,7 +58,10 @@ class SpeechInput(private val context: Context) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            // NOTE: we intentionally do NOT force EXTRA_PREFER_OFFLINE — forcing
+            // offline yields ERROR_LANGUAGE_NOT_SUPPORTED (12) when the device has
+            // no offline model for the language. Let the recognizer choose.
             if (!languageTag.isNullOrEmpty()) putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
         }
         sr.startListening(intent)
@@ -83,6 +86,11 @@ class SpeechInput(private val context: Context) {
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer is busy"
         SpeechRecognizer.ERROR_SERVER -> "Recognition server error"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech heard"
+        10 -> "Too many requests — try again"
+        11 -> "Speech service disconnected"
+        12 -> "Voice language not available — enable a language for voice typing in system settings"
+        13 -> "Voice language unavailable"
+        14 -> "Can't verify voice-language support"
         else -> "Recognition error ($code)"
     }
 }
