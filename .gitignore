@@ -1,0 +1,13 @@
+# Build artifacts
+*.apk
+*.aab
+build/
+.gradle/
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Secrets
+*.keystore
+secrets.properties
