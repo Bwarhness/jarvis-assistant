@@ -65,6 +65,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
     val transcript by vm.transcript
     val reply by vm.reply
     val error by vm.error
+    val hint by vm.hint
     val working by vm.working
     val stalled by vm.stalled
 
@@ -150,6 +151,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
                 when (state) {
                     ConvState.Idle -> IdleContent(
                         hasPermission = hasPermission,
+                        hint = hint,
                         onMicTap = {
                             if (hasPermission) vm.onMicTap()
                             else permLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -187,7 +189,7 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
 }
 
 @Composable
-private fun IdleContent(hasPermission: Boolean, onMicTap: () -> Unit) {
+private fun IdleContent(hasPermission: Boolean, hint: String?, onMicTap: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -275,14 +277,33 @@ private fun IdleContent(hasPermission: Boolean, onMicTap: () -> Unit) {
                 }
             }
 
-            // Caption
-            Text(
-                text = "Tap, or say \"Hey Jarvis\"",
-                fontFamily = DmSans,
-                fontWeight = FontWeight.Normal,
-                fontSize = 14.sp,
-                color = JarvisColors.TextSecondary,
-            )
+            // Caption or hint
+            if (hint != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = hint,
+                        fontFamily = DmSans,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 14.sp,
+                        color = JarvisColors.CyanText,
+                    )
+                    Text(
+                        text = "Tap the mic to talk",
+                        fontFamily = DmSans,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 14.sp,
+                        color = JarvisColors.Muted,
+                    )
+                }
+            } else {
+                Text(
+                    text = "Tap, or say \"Hey Jarvis\"",
+                    fontFamily = DmSans,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    color = JarvisColors.TextSecondary,
+                )
+            }
         }
     }
 }

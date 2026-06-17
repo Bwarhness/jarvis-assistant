@@ -37,6 +37,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     val transcript = mutableStateOf("")
     val reply = mutableStateOf("")
     val error = mutableStateOf<String?>(null)
+    val hint = mutableStateOf<String?>(null)
     val working = mutableStateOf(false) // Hermes stream still open (response not complete)
     val stalled = mutableStateOf(false) // content paused mid-stream — likely running a tool
 
@@ -143,6 +144,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         transcript.value = ""
         reply.value = ""
         error.value = null
+        hint.value = null
     }
 
     /**
@@ -160,6 +162,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         transcript.value = ""
         reply.value = ""
         error.value = null
+        hint.value = null
         working.value = false
         stalled.value = false
         segments.clear()
@@ -195,7 +198,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                     main.postDelayed({ if (turn == myTurn) startRecognition() }, 450)
                     return@onMain
                 }
-                error.value = message
+                hint.value = message
                 goIdle()
             }
         })
@@ -204,6 +207,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private fun think(userText: String) {
         val myTurn = turn
         emptyWakeTurns = 0 // got real speech — reset the wake loop-breaker
+        hint.value = null
         // Pipeline state was already cleared by beginTurn(); only the stream-status
         // flags are new for this thinking phase.
         state.value = ConvState.Thinking
@@ -396,6 +400,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         pendingText.value = ""
         spokenCount = 0
         state.value = ConvState.Idle
+        hint.value = null
         // Save the conversation (covers turns that ended in an error/cancel, not just
         // successful replies) before handing the mic back to the wake listener.
         repo.persistAsync()
