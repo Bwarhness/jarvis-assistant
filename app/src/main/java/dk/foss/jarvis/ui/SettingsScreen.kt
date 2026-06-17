@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -66,9 +67,20 @@ fun SettingsScreen(onBack: () -> Unit) {
     var elevenKey by remember { mutableStateOf("") }
     var elevenVoice by remember { mutableStateOf(SettingsStore.DEFAULT_ELEVEN_VOICE) }
     var wakeEnabled by remember { mutableStateOf(false) }
+    var overlayGranted by remember { mutableStateOf(AndroidSettings.canDrawOverlays(context)) }
     var loaded by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+
+    val overlayLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { overlayGranted = AndroidSettings.canDrawOverlays(context) }
+
+    fun requestOverlay() {
+        overlayLauncher.launch(
+            Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
+        )
+    }
 
     suspend fun persist() {
         store.updateConnection(baseUrl, apiKey, model)
@@ -79,6 +91,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         scope.launch { store.updateWake(true) }
         WakeWordService.start(context)
         wakeEnabled = true
+        // Needed so the service can open the app from the background on detection.
+        if (!overlayGranted) requestOverlay()
     }
 
     val wakePermLauncher = rememberLauncherForActivityResult(
@@ -230,6 +244,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                 }
                 Switch(checked = wakeEnabled, onCheckedChange = { toggleWake(it) })
+            }
+
+            if (wakeEnabled && !overlayGranted) {
+                OutlinedButton(onClick = { requestOverlay() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Allow “display over other apps” (needed to open on wake)")
+                }
             }
 
             Text(

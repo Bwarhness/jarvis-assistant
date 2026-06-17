@@ -28,7 +28,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (isAssistIntent(intent)) assistEpoch++
+        if (isAssistIntent(intent)) {
+            assistEpoch++
+            showOverLockScreen()
+        }
 
         setContent {
             JarvisTheme {
@@ -64,7 +67,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (isAssistIntent(intent)) assistEpoch++
+        if (isAssistIntent(intent)) {
+            assistEpoch++
+            showOverLockScreen()
+        }
+    }
+
+    /** Appear over the lock screen and turn the display on (wake-word / assist launch). */
+    private fun showOverLockScreen() {
+        if (android.os.Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
     }
 
     private fun isAssistIntent(i: Intent?): Boolean =
