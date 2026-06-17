@@ -62,7 +62,8 @@ class ElevenLabsTts(
     context: Context,
     private val apiKey: String,
     private val voiceId: String,
-    private val modelId: String = "eleven_multilingual_v2",
+    // Low-latency model for real-time assistant replies (multilingual, high quality).
+    private val modelId: String = "eleven_turbo_v2_5",
 ) : TtsEngine {
 
     private val appContext = context.applicationContext
@@ -81,7 +82,7 @@ class ElevenLabsTts(
             try {
                 val body = """{"text":${jsonString(text)},"model_id":${jsonString(modelId)}}"""
                 val req = Request.Builder()
-                    .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream?output_format=mp3_44100_128")
+                    .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream?output_format=mp3_44100_128&optimize_streaming_latency=3")
                     .addHeader("xi-api-key", apiKey)
                     .addHeader("Accept", "audio/mpeg")
                     .post(body.toRequestBody("application/json".toMediaType()))
