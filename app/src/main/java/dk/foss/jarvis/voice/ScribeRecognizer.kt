@@ -27,6 +27,7 @@ class ScribeRecognizer(
 
     override fun start(languageTag: String?, listener: VoiceRecognizer.Listener) {
         this.listener = listener
+        capture.cancel() // ensure no prior capture blocks this one (active-guard)
         listener.onReady()
         capture.start(
             onSpeechStart = {},

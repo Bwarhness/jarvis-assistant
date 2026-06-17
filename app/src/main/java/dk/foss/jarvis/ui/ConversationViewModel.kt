@@ -111,6 +111,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         main.removeCallbacks(stallIndicator)
         working.value = false
         stalled.value = false
+        // Stop any in-flight recognition so the next start isn't blocked by
+        // AudioCapture's "if (active) return" guard (which silently drops it).
+        runCatching { recognizer?.stop() }
         source?.cancel(); source = null
         runCatching { tts?.stop(); androidFallback?.stop() }
         ttsQueue.clear()
@@ -291,11 +294,17 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         if (continuous) startListening() else goIdle()
     }
 
-    /** Go idle and re-arm the wake word so "Hey Jarvis" can restart the conversation. */
+    /**
+     * Go idle WITHIN the conversation. We deliberately do NOT resume the wake word
+     * here: the conversation screen owns the mic the whole time it is open, and
+     * re-arming the wake word on idle created a feedback loop (idle -> wake fires ->
+     * assist relaunch -> startListening -> no-speech -> idle -> ...). The wake word
+     * is resumed only when the conversation is actually left (stopAll/onCleared).
+     * To re-engage after a silence, tap the mic.
+     */
     private fun goIdle() {
-        Log.i(TAG, "goIdle -> resume wake")
+        Log.i(TAG, "goIdle (wake stays paused)")
         state.value = ConvState.Idle
-        WakeWordService.resumeListening()
     }
 
     private fun ensureFallback(): TtsEngine? {

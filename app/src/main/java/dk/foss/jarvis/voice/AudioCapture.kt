@@ -21,6 +21,7 @@ import kotlin.math.sqrt
 class AudioCapture(private val context: Context) {
 
     @Volatile private var active = false
+    @Volatile private var generation = 0
     private var thread: Thread? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -32,6 +33,7 @@ class AudioCapture(private val context: Context) {
     ) {
         if (active) return
         active = true
+        val gen = ++generation
         thread = Thread {
             var record: AudioRecord? = null
             try {
@@ -56,7 +58,7 @@ class AudioCapture(private val context: Context) {
                 var elapsedMs = 0
                 var notifiedStart = false
 
-                while (active) {
+                while (active && gen == generation) {
                     val n = record.read(buf, 0, buf.size)
                     if (n <= 0) continue
                     val frameMs = n * 1000 / SAMPLE_RATE
@@ -96,17 +98,22 @@ class AudioCapture(private val context: Context) {
                 // no-speech. Stops ambient noise/silence blips from being sent to
                 // Scribe (which hallucinates phantom phrases on near-silence).
                 val enough = speechStarted && pcm.size() >= MIN_SPEECH_BYTES
-                Log.d(TAG, "capture done: speechStarted=$speechStarted bytes=${pcm.size()} -> ${if (enough) "transcribe" else "no-speech"}")
-                if (!enough) {
+                val superseded = gen != generation
+                Log.d(TAG, "capture done: gen=$gen cur=$generation speechStarted=$speechStarted bytes=${pcm.size()} -> ${if (superseded) "superseded" else if (enough) "transcribe" else "no-speech"}")
+                if (superseded) {
+                    // A newer capture took over — don't deliver a stale result.
+                } else if (!enough) {
                     post { onResult(null) }
                 } else {
                     val file = writeWav(pcm.toByteArray())
                     post { onResult(file) }
                 }
             } catch (e: Exception) {
-                post { onError(e.message ?: "Recording failed") }
+                if (gen == generation) post { onError(e.message ?: "Recording failed") }
             } finally {
-                active = false
+                // Only clear the shared flag if we're still the current generation,
+                // so a stale thread can't disarm a newer capture.
+                if (gen == generation) active = false
                 runCatching { record?.release() }
             }
         }.also { it.start() }

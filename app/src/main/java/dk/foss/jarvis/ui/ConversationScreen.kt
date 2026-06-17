@@ -78,8 +78,11 @@ fun ConversationScreen(vm: ConversationViewModel, assistTrigger: Int, onExit: ()
     LaunchedEffect(assistTrigger) {
         if (assistTrigger != lastTrigger) {
             lastTrigger = assistTrigger
-            android.util.Log.i("JarvisConv", "assistTrigger fired ($assistTrigger) -> startListening")
-            if (hasPermission) vm.startListening()
+            // Only (re)start from an assist trigger when not already mid-turn.
+            if (hasPermission && state == ConvState.Idle) {
+                android.util.Log.i("JarvisConv", "assistTrigger fired ($assistTrigger) -> startListening")
+                vm.startListening()
+            }
         }
     }
     // Stop the conversation (and hand the mic back to "Hey Jarvis") when the app is
