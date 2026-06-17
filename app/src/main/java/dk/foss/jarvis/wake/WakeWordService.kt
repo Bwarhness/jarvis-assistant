@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import com.rementia.openwakeword.lib.WakeWordEngine
 import com.rementia.openwakeword.lib.model.DetectionMode
@@ -38,11 +37,13 @@ class WakeWordService : Service() {
     private var engine: WakeWordEngine? = null
 
     @Volatile private var cooling = false
+    @Volatile private var paused = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         createChannels()
         ServiceCompat.startForeground(
             this,
@@ -78,27 +79,13 @@ class WakeWordService : Service() {
         if (cooling) return
         cooling = true
 
+        // Free the mic so conversation mode's recognizer can record, then open the app.
+        pauseEngine()
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(MainActivity.EXTRA_FROM_ASSIST, true)
         }
-        // Best-effort direct launch (works when app recently foreground / on many OEMs)...
         runCatching { startActivity(launch) }
-        // ...plus a high-priority full-screen-intent notification as the reliable path.
-        val pi = PendingIntent.getActivity(
-            this, 1, launch,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val alert = NotificationCompat.Builder(this, CHANNEL_ALERT)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Jarvis")
-            .setContentText("Listening…")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setFullScreenIntent(pi, true)
-            .setAutoCancel(true)
-            .build()
-        runCatching { NotificationManagerCompat.from(this).notify(NOTIF_ALERT, alert) }
 
         uiScope.launch {
             delay(4000)
@@ -128,12 +115,26 @@ class WakeWordService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ONGOING, "Wake word", NotificationManager.IMPORTANCE_LOW),
         )
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ALERT, "Jarvis triggered", NotificationManager.IMPORTANCE_HIGH),
-        )
+    }
+
+    /** Release the mic (e.g. while a conversation is using the recognizer). */
+    private fun pauseEngine() {
+        if (paused) return
+        paused = true
+        runCatching { engine?.stop() }
+        Log.i(TAG, "wake paused (mic released)")
+    }
+
+    /** Resume always-on listening after a conversation finishes. */
+    private fun resumeEngine() {
+        if (!paused) return
+        paused = false
+        runCatching { engine?.start() }
+        Log.i(TAG, "wake resumed")
     }
 
     override fun onDestroy() {
+        instance = null
         runCatching { engine?.stop(); engine?.release() }
         engine = null
         runCatching { engineScope.cancel() }
@@ -144,11 +145,20 @@ class WakeWordService : Service() {
     companion object {
         private const val TAG = "JarvisWake"
         private const val CHANNEL_ONGOING = "jarvis_wake_ongoing"
-        private const val CHANNEL_ALERT = "jarvis_wake_alert"
         private const val NOTIF_ONGOING = 1001
-        private const val NOTIF_ALERT = 1002
         private const val DETECTION_THRESHOLD = 0.5f
         private const val COOLDOWN_MS = 1500L
+
+        @Volatile private var instance: WakeWordService? = null
+
+        /** Pause/resume the always-on listener so the mic is free during a conversation. */
+        fun pauseListening() {
+            instance?.pauseEngine()
+        }
+
+        fun resumeListening() {
+            instance?.resumeEngine()
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, WakeWordService::class.java)

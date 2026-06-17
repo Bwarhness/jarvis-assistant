@@ -14,6 +14,7 @@ import dk.foss.jarvis.voice.AndroidTts
 import dk.foss.jarvis.voice.ElevenLabsTts
 import dk.foss.jarvis.voice.SpeechInput
 import dk.foss.jarvis.voice.TtsEngine
+import dk.foss.jarvis.wake.WakeWordService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.sse.EventSource
@@ -65,6 +66,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startListening() {
+        // Free the mic from the always-on wake listener so STT can record.
+        WakeWordService.pauseListening()
         viewModelScope.launch {
             ensureReady()
             if (settings?.isConfigured != true) {
@@ -248,6 +251,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         speaking = false
         streamDone = false
         state.value = ConvState.Idle
+        // Hand the mic back to the always-on wake listener.
+        WakeWordService.resumeListening()
     }
 
     override fun onCleared() {
@@ -255,6 +260,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         source?.cancel()
         tts?.shutdown()
         androidFallback?.shutdown()
+        WakeWordService.resumeListening()
         super.onCleared()
     }
 }
