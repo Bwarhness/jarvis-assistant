@@ -11,3 +11,4 @@ local.properties
 # Secrets
 *.keystore
 secrets.properties
+keys.properties

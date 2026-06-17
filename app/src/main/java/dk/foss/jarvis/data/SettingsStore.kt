@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dk.foss.jarvis.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -36,8 +37,8 @@ class SettingsStore(private val context: Context) {
 
     val settings: Flow<JarvisSettings> = context.dataStore.data.map { p ->
         JarvisSettings(
-            baseUrl = p[Keys.BASE_URL] ?: "",
-            apiKey = p[Keys.API_KEY] ?: "",
+            baseUrl = p[Keys.BASE_URL] ?: BuildConfig.DEFAULT_BASE_URL,
+            apiKey = p[Keys.API_KEY] ?: BuildConfig.DEFAULT_API_KEY,
             model = (p[Keys.MODEL] ?: "").ifEmpty { DEFAULT_MODEL },
             elevenKey = p[Keys.ELEVEN_KEY] ?: "",
             elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "").ifEmpty { DEFAULT_ELEVEN_VOICE },

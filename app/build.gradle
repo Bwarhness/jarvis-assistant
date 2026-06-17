@@ -4,6 +4,15 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// Optional preconfiguration: a gitignored keys.properties can bake in a default
+// Hermes base URL + API key so a build ships ready-to-connect. Repo stays clean.
+def keysFile = rootProject.file("keys.properties")
+def keysProps = new Properties()
+if (keysFile.exists()) keysProps.load(new FileInputStream(keysFile))
+def jvEscape = { String s -> (s ?: "").replace("\\", "\\\\").replace("\"", "\\\"") }
+def defBaseUrl = jvEscape(keysProps.getProperty("JARVIS_BASE_URL", ""))
+def defApiKey = jvEscape(keysProps.getProperty("JARVIS_API_KEY", ""))
+
 android {
     namespace 'dk.foss.jarvis'
     compileSdk 34
@@ -21,6 +30,8 @@ android {
             // ONNX Runtime ships native libs per-ABI; real phones are ARM.
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
+        buildConfigField "String", "DEFAULT_BASE_URL", "\"${defBaseUrl}\""
+        buildConfigField "String", "DEFAULT_API_KEY", "\"${defApiKey}\""
     }
 
     buildTypes {
@@ -43,6 +54,7 @@ android {
     }
     buildFeatures {
         compose true
+        buildConfig true
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.10'
