@@ -20,13 +20,15 @@ import dk.foss.jarvis.ui.ChatScreen
 import dk.foss.jarvis.ui.ChatViewModel
 import dk.foss.jarvis.ui.ConversationScreen
 import dk.foss.jarvis.ui.ConversationViewModel
+import dk.foss.jarvis.ui.HistoryScreen
+import dk.foss.jarvis.ui.HistoryViewModel
 import dk.foss.jarvis.ui.JarvisTheme
 import dk.foss.jarvis.ui.SettingsScreen
 import dk.foss.jarvis.wake.WakeWordService
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private enum class Screen { Chat, Settings, Conversation }
+private enum class Screen { Chat, Settings, Conversation, History }
 
 class MainActivity : ComponentActivity() {
 
@@ -59,6 +61,7 @@ class MainActivity : ComponentActivity() {
                             vm = vm,
                             onOpenSettings = { screen = Screen.Settings },
                             onOpenVoice = { screen = Screen.Conversation },
+                            onOpenHistory = { screen = Screen.History },
                         )
                     }
                     Screen.Settings -> {
@@ -69,6 +72,15 @@ class MainActivity : ComponentActivity() {
                         BackHandler { screen = Screen.Chat }
                         val cvm: ConversationViewModel = viewModel()
                         ConversationScreen(vm = cvm, onExit = { screen = Screen.Chat })
+                    }
+                    Screen.History -> {
+                        BackHandler { screen = Screen.Chat }
+                        val hvm: HistoryViewModel = viewModel()
+                        HistoryScreen(
+                            vm = hvm,
+                            onOpen = { screen = Screen.Chat },
+                            onBack = { screen = Screen.Chat },
+                        )
                     }
                 }
             }

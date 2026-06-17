@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -39,10 +40,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import dk.foss.jarvis.data.UiMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(vm: ChatViewModel, onOpenSettings: () -> Unit, onOpenVoice: () -> Unit) {
+fun ChatScreen(
+    vm: ChatViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenVoice: () -> Unit,
+    onOpenHistory: () -> Unit,
+) {
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
     val messages = vm.messages
@@ -63,6 +70,9 @@ fun ChatScreen(vm: ChatViewModel, onOpenSettings: () -> Unit, onOpenVoice: () ->
                 actions = {
                     IconButton(onClick = onOpenVoice) {
                         Icon(Icons.Default.Mic, contentDescription = "Voice conversation")
+                    }
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Default.History, contentDescription = "History")
                     }
                     IconButton(onClick = { vm.newConversation() }) {
                         Icon(Icons.Default.Add, contentDescription = "New conversation")

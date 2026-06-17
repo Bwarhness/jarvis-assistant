@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.JarvisSettings
 import dk.foss.jarvis.data.SettingsStore
 import dk.foss.jarvis.hermes.ChatMessage
@@ -26,6 +27,7 @@ enum class ConvState { Idle, Listening, Thinking, Speaking }
 class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settingsStore = SettingsStore(app)
+    private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: VoiceRecognizer? = null
 
@@ -39,8 +41,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var settings: JarvisSettings? = null
     private var tts: TtsEngine? = null
     private var androidFallback: AndroidTts? = null
-    private val history = mutableListOf<ChatMessage>()
-    private var sessionId: String? = null
     private var source: EventSource? = null
     private var continuous = true
 
@@ -162,16 +162,17 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         working.value = true
         stalled.value = false
         main.postDelayed(stallIndicator, STALL_MS)
-        history.add(ChatMessage("user", userText))
+        repo.addMessage("user", userText)
+        val requestHistory = repo.historyForRequest().map { ChatMessage(it.first, it.second) }
 
         val s = settings ?: return
         val client = HermesClient(s.baseUrl, s.apiKey)
-        source = client.streamChat(history.toList(), s.model, sessionId, object : HermesClient.StreamCallbacks {
+        source = client.streamChat(requestHistory, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
             override fun onDelta(textDelta: String) = main.post {
                 if (turn == myTurn) onTextDelta(textDelta)
             }.let {}
 
-            override fun onSessionId(id: String) { sessionId = id }
+            override fun onSessionId(id: String) { repo.setSessionId(id) }
 
             override fun onComplete() = main.post {
                 if (turn != myTurn) return@post
@@ -183,7 +184,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 val rest = sentenceBuffer.toString().trim()
                 sentenceBuffer.setLength(0)
                 if (rest.isNotEmpty()) enqueueSpeech(rest)
-                if (reply.value.isNotBlank()) history.add(ChatMessage("assistant", reply.value))
+                if (reply.value.isNotBlank()) repo.addMessage("assistant", reply.value)
+                viewModelScope.launch { repo.persist() }
                 streamDone = true
                 pump()
             }.let {}

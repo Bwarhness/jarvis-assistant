@@ -3,35 +3,36 @@ package dk.foss.jarvis.ui
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.SettingsStore
+import dk.foss.jarvis.data.UiMessage
 import dk.foss.jarvis.hermes.ChatMessage
 import dk.foss.jarvis.hermes.HermesClient
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.sse.EventSource
 
-data class UiMessage(val role: String, val text: String, val isError: Boolean = false)
-
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settingsStore = SettingsStore(app)
+    private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
 
-    val messages = mutableStateListOf<UiMessage>()
+    val messages get() = repo.messages
     val isStreaming = mutableStateOf(false)
     val notConfigured = mutableStateOf(false)
 
-    private var sessionId: String? = null
     private var currentSource: EventSource? = null
 
     fun newConversation() {
         cancel()
-        messages.clear()
-        sessionId = null
+        viewModelScope.launch {
+            repo.persist()
+            repo.startNew()
+        }
     }
 
     fun cancel() {
@@ -48,45 +49,37 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             val s = settingsStore.settings.first()
-            if (!s.isConfigured) {
-                notConfigured.value = true
-                return@launch
-            }
+            if (!s.isConfigured) { notConfigured.value = true; return@launch }
 
-            messages.add(UiMessage("user", text))
-            messages.add(UiMessage("assistant", ""))
-            val assistantIndex = messages.lastIndex
+            repo.addMessage("user", text)
+            val history = repo.historyForRequest().map { ChatMessage(it.first, it.second) }
+            val assistantIndex = repo.addMessage("assistant", "")
             isStreaming.value = true
 
-            // Full history (excluding the empty assistant placeholder and any error rows).
-            val history = messages.dropLast(1)
-                .filter { !it.isError }
-                .map { ChatMessage(it.role, it.text) }
-
             val client = HermesClient(s.baseUrl, s.apiKey)
-            currentSource = client.streamChat(history, s.model, sessionId, object : HermesClient.StreamCallbacks {
+            currentSource = client.streamChat(history, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
                 override fun onDelta(textDelta: String) = main.post {
-                    if (assistantIndex <= messages.lastIndex) {
-                        val cur = messages[assistantIndex]
-                        messages[assistantIndex] = cur.copy(text = cur.text + textDelta)
-                    }
+                    repo.appendToMessage(assistantIndex, textDelta)
                 }.let {}
 
-                override fun onSessionId(id: String) { sessionId = id }
+                override fun onSessionId(id: String) { repo.setSessionId(id) }
 
                 override fun onComplete() = main.post {
                     isStreaming.value = false
                     currentSource = null
+                    viewModelScope.launch { repo.persist() }
                 }.let {}
 
                 override fun onError(message: String) = main.post {
-                    if (assistantIndex <= messages.lastIndex && messages[assistantIndex].text.isEmpty()) {
-                        messages[assistantIndex] = UiMessage("assistant", "⚠️ $message", isError = true)
+                    val cur = messages.getOrNull(assistantIndex)
+                    if (cur != null && cur.text.isEmpty()) {
+                        repo.replaceMessage(assistantIndex, "⚠️ $message", isError = true)
                     } else {
-                        messages.add(UiMessage("assistant", "⚠️ $message", isError = true))
+                        repo.addMessage("assistant", "⚠️ $message", isError = true)
                     }
                     isStreaming.value = false
                     currentSource = null
+                    viewModelScope.launch { repo.persist() }
                 }.let {}
             })
         }
@@ -94,6 +87,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         cancel()
+        viewModelScope.launch { repo.persist() }
         super.onCleared()
     }
 }
