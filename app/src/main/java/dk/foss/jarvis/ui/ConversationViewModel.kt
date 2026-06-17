@@ -33,6 +33,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     val transcript = mutableStateOf("")
     val reply = mutableStateOf("")
     val error = mutableStateOf<String?>(null)
+    val working = mutableStateOf(false) // Hermes stream still open (response not complete)
+    val stalled = mutableStateOf(false) // content paused mid-stream — likely running a tool
 
     private var settings: JarvisSettings? = null
     private var tts: TtsEngine? = null
@@ -53,6 +55,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     // Speak a complete sentence that's been sitting in the buffer once the stream
     // goes quiet (e.g. the agent paused to run a tool), not only when more text arrives.
     private val idleFlush = Runnable { flushPendingSentence() }
+
+    // If content pauses while the stream is still open, the agent is likely running a tool.
+    private val stallIndicator = Runnable { if (working.value) stalled.value = true }
 
     init {
         viewModelScope.launch { ensureReady() }
@@ -101,6 +106,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private fun beginTurn() {
         turn++
         main.removeCallbacks(idleFlush)
+        main.removeCallbacks(stallIndicator)
+        working.value = false
+        stalled.value = false
         source?.cancel(); source = null
         runCatching { tts?.stop(); androidFallback?.stop() }
         ttsQueue.clear()
@@ -151,6 +159,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         ttsQueue.clear()
         speaking = false
         streamDone = false
+        working.value = true
+        stalled.value = false
+        main.postDelayed(stallIndicator, STALL_MS)
         history.add(ChatMessage("user", userText))
 
         val s = settings ?: return
@@ -165,6 +176,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             override fun onComplete() = main.post {
                 if (turn != myTurn) return@post
                 main.removeCallbacks(idleFlush)
+                main.removeCallbacks(stallIndicator)
+                working.value = false
+                stalled.value = false
                 // flush whatever's left as the final sentence
                 val rest = sentenceBuffer.toString().trim()
                 sentenceBuffer.setLength(0)
@@ -176,6 +190,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
             override fun onError(message: String) = main.post {
                 if (turn != myTurn) return@post
+                main.removeCallbacks(stallIndicator)
+                working.value = false
+                stalled.value = false
                 error.value = message
                 state.value = ConvState.Idle
             }.let {}
@@ -187,10 +204,12 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         reply.value += delta
         sentenceBuffer.append(delta)
         extractSentences()
-        // If the stream then goes quiet (tool call / thinking) with a finished
-        // sentence still buffered, speak it rather than waiting for the next token.
+        // Content is flowing → not stalled. Re-arm both timers.
+        stalled.value = false
         main.removeCallbacks(idleFlush)
         main.postDelayed(idleFlush, IDLE_FLUSH_MS)
+        main.removeCallbacks(stallIndicator)
+        main.postDelayed(stallIndicator, STALL_MS)
     }
 
     private fun flushPendingSentence() {
@@ -285,6 +304,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         continuous = false
         turn++
         main.removeCallbacks(idleFlush)
+        main.removeCallbacks(stallIndicator)
+        working.value = false
+        stalled.value = false
         recognizer?.release()
         recognizer = null
         runCatching { tts?.stop(); androidFallback?.stop() }
@@ -309,5 +331,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val IDLE_FLUSH_MS = 350L
+        const val STALL_MS = 800L
     }
 }
