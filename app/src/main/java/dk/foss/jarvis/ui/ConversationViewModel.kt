@@ -33,6 +33,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private var settings: JarvisSettings? = null
     private var tts: TtsEngine? = null
+    private var androidFallback: AndroidTts? = null
     private val history = mutableListOf<ChatMessage>()
     private var sessionId: String? = null
     private var source: EventSource? = null
@@ -121,22 +122,37 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun speak(text: String) {
         state.value = ConvState.Speaking
-        val engine = tts
-        if (engine == null) { state.value = ConvState.Idle; return }
-        engine.speak(
+        val primary = tts
+        if (primary == null) { afterSpeak(); return }
+        primary.speak(
             text = text,
-            onDone = {
-                main.post {
-                    if (continuous) startListening() else state.value = ConvState.Idle
-                }
-            },
+            onDone = { afterSpeak() },
             onError = { msg ->
-                main.post {
-                    error.value = msg
-                    state.value = ConvState.Idle
+                // ElevenLabs (or whatever the primary is) failed — fall back to the
+                // phone's built-in TTS so the reply is still spoken.
+                val fb = ensureFallback()
+                if (fb != null && fb !== primary) {
+                    fb.speak(
+                        text = text,
+                        onDone = { afterSpeak() },
+                        onError = { fbMsg -> main.post { error.value = fbMsg; state.value = ConvState.Idle } },
+                    )
+                } else {
+                    main.post { error.value = msg; state.value = ConvState.Idle }
                 }
             },
         )
+    }
+
+    private fun afterSpeak() = main.post {
+        if (continuous) startListening() else state.value = ConvState.Idle
+    }.let {}
+
+    /** Lazily build the on-device TTS used as a fallback (or reuse the primary if it already is). */
+    private fun ensureFallback(): TtsEngine? {
+        (tts as? AndroidTts)?.let { return it }
+        if (androidFallback == null) androidFallback = AndroidTts(getApplication(), languageTag = null)
+        return androidFallback
     }
 
     /** Tap behaviour: interrupt whatever is happening and listen again. */
@@ -164,6 +180,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         speech.stop()
         source?.cancel()
         tts?.shutdown()
+        androidFallback?.shutdown()
         super.onCleared()
     }
 }
