@@ -1,9 +1,11 @@
 package dk.foss.jarvis
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,15 +22,21 @@ private enum class Screen { Chat, Settings, Conversation }
 
 class MainActivity : ComponentActivity() {
 
+    // Incremented each time the assistant is triggered; observed by Compose to
+    // jump into conversation mode (works for both cold start and onNewIntent).
+    private var assistEpoch by mutableStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val fromAssist = intent?.getBooleanExtra(EXTRA_FROM_ASSIST, false) == true ||
-            intent?.action == android.content.Intent.ACTION_ASSIST
+        if (isAssistIntent(intent)) assistEpoch++
 
         setContent {
             JarvisTheme {
                 var screen by remember {
-                    mutableStateOf(if (fromAssist) Screen.Conversation else Screen.Chat)
+                    mutableStateOf(if (assistEpoch > 0) Screen.Conversation else Screen.Chat)
+                }
+                LaunchedEffect(assistEpoch) {
+                    if (assistEpoch > 0) screen = Screen.Conversation
                 }
                 when (screen) {
                     Screen.Chat -> {
@@ -52,6 +60,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (isAssistIntent(intent)) assistEpoch++
+    }
+
+    private fun isAssistIntent(i: Intent?): Boolean =
+        i?.getBooleanExtra(EXTRA_FROM_ASSIST, false) == true ||
+            i?.action == Intent.ACTION_ASSIST
 
     companion object {
         const val EXTRA_FROM_ASSIST = "from_assist"
