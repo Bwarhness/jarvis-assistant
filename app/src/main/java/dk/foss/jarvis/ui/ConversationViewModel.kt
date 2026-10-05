@@ -10,6 +10,7 @@ import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.JarvisSettings
 import dk.foss.jarvis.data.SettingsStore
 import dk.foss.jarvis.hermes.HermesClient
+import dk.foss.jarvis.location.LocationContextualizer
 import dk.foss.jarvis.voice.AndroidTts
 import dk.foss.jarvis.voice.ElevenLabsTts
 import dk.foss.jarvis.voice.ScribeRecognizer
@@ -29,6 +30,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: VoiceRecognizer? = null
+    private val locationContextualizer = LocationContextualizer(app)
+
+    /** 📍 chip: what the agent was last told (null = nothing sent / sharing off). */
+    val lastSentLocation = mutableStateOf<String?>(null)
 
     /** Run on the main thread; returns Unit so it fits expression-body callbacks. */
     private fun onMain(block: () -> Unit) { main.post(block) }
@@ -217,8 +222,21 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         val requestHistory = repo.historyForRequest()
 
         val s = settings ?: return
+        // USER_CONTEXT injection (spec §5.2). Suspends briefly for location but is
+        // capped at 5 s and falls back to sending without context on any failure.
+        viewModelScope.launch {
+            if (turn != myTurn) return@launch
+            val locationContext = locationContextualizer.buildContextMessage(s)
+            if (turn != myTurn) return@launch
+            lastSentLocation.value = locationContextualizer.lastSentLabel
+            val out = locationContext?.let { listOf(it) + requestHistory } ?: requestHistory
+            startStream(myTurn, s, out)
+        }
+    }
+
+    private fun startStream(myTurn: Int, s: JarvisSettings, out: List<dk.foss.jarvis.hermes.ChatMessage>) {
         val client = HermesClient(s.baseUrl, s.apiKey)
-        source = client.streamChat(requestHistory, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
+        source = client.streamChat(out, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
             override fun onDelta(textDelta: String) = onMain {
                 if (turn == myTurn) onTextDelta(textDelta)
             }

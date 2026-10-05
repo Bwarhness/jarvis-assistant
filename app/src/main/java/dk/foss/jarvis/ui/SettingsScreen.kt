@@ -148,6 +148,75 @@ fun SettingsScreen(onBack: () -> Unit) {
         if (grants[Manifest.permission.RECORD_AUDIO] == true) enableWake()
     }
 
+    // --- Location sharing (spec §6/§7) ---
+    var locationSharing by remember { mutableStateOf(false) }
+    var locationPrecise by remember { mutableStateOf(false) }
+    var locationSendStale by remember { mutableStateOf(true) }
+
+    fun hasPermission(perm: String) =
+        ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+
+    val locationPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        ) {
+            scope.launch { store.updateLocationSharing(true) }
+            locationSharing = true
+        } else {
+            status = "Location sharing stays off — permission was denied."
+        }
+    }
+
+    val precisePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            scope.launch { store.updateLocationPrecise(true) }
+            locationPrecise = true
+        } else {
+            // "Approximate only" or denial: degrade to coarse gracefully (spec §8).
+            locationPrecise = false
+            scope.launch { store.updateLocationPrecise(false) }
+        }
+    }
+
+    fun toggleLocationSharing(on: Boolean) {
+        if (on) {
+            if (hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ||
+                hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            ) {
+                scope.launch { store.updateLocationSharing(true) }
+                locationSharing = true
+            } else {
+                locationPermLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                    ),
+                )
+            }
+        } else {
+            scope.launch { store.updateLocationSharing(false) }
+            locationSharing = false
+        }
+    }
+
+    fun togglePrecise(on: Boolean) {
+        if (on) {
+            if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                scope.launch { store.updateLocationPrecise(true) }
+                locationPrecise = true
+            } else {
+                precisePermLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            }
+        } else {
+            scope.launch { store.updateLocationPrecise(false) }
+            locationPrecise = false
+        }
+    }
+
     fun toggleWake(on: Boolean) {
         if (on) {
             val needed = buildList {
@@ -175,6 +244,9 @@ fun SettingsScreen(onBack: () -> Unit) {
         elevenKey = s.elevenKey
         elevenVoice = s.elevenVoiceId
         wakeEnabled = s.wakeEnabled
+        locationSharing = s.locationSharingEnabled
+        locationPrecise = s.locationPrecise
+        locationSendStale = s.locationSendStale
         loaded = true
     }
 
@@ -484,6 +556,41 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
 
                 SettingsDivider()
+                SectionHeader("Location")
+
+                Text(
+                    "Share your current location with Hermes on each message, so answers are aware of where you are. " +
+                        "Off by default. Location is fetched only when you send a message — never in the background, never stored by the app.",
+                    fontFamily = DmSans,
+                    fontSize = 13.sp,
+                    color = JarvisColors.Muted,
+                )
+
+                SettingsToggle(
+                    title = "Share location with Jarvis",
+                    subtitle = "Adds a USER_CONTEXT system message (city + country) to every turn.",
+                    checked = locationSharing,
+                    onCheckedChange = { toggleLocationSharing(it) },
+                )
+                SettingsToggle(
+                    title = "Precise location",
+                    subtitle = "Send exact coordinates instead of city-level. Requests the fine-location permission.",
+                    checked = locationPrecise,
+                    enabled = locationSharing,
+                    onCheckedChange = { togglePrecise(it) },
+                )
+                SettingsToggle(
+                    title = "Send stale fix if no fresh one",
+                    subtitle = "If the last fix is older than 10 min, send it labeled with its age instead of omitting location.",
+                    checked = locationSendStale,
+                    enabled = locationSharing,
+                    onCheckedChange = {
+                        locationSendStale = it
+                        scope.launch { store.updateLocationSendStale(it) }
+                    },
+                )
+
+                SettingsDivider()
                 SectionHeader("System integration")
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -550,6 +657,44 @@ private fun SettingsDivider() {
         modifier = Modifier.padding(vertical = 8.dp),
         color = JarvisColors.Cyan.copy(alpha = 0.08f),
     )
+}
+
+@Composable
+private fun SettingsToggle(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                fontFamily = DmSans,
+                fontWeight = FontWeight.Medium,
+                fontSize = 15.sp,
+                color = if (enabled) JarvisColors.TextPrimary else JarvisColors.Muted,
+            )
+            Text(
+                subtitle,
+                fontFamily = DmSans,
+                fontSize = 12.sp,
+                color = JarvisColors.Muted,
+            )
+        }
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = JarvisColors.Cyan,
+                checkedTrackColor = JarvisColors.Cyan.copy(alpha = 0.3f),
+                uncheckedThumbColor = JarvisColors.Muted,
+                uncheckedTrackColor = JarvisColors.Muted.copy(alpha = 0.2f),
+            ),
+        )
+    }
 }
 
 @Composable

@@ -19,6 +19,9 @@ data class JarvisSettings(
     val elevenKey: String,
     val elevenVoiceId: String,
     val wakeEnabled: Boolean,
+    val locationSharingEnabled: Boolean,
+    val locationPrecise: Boolean,
+    val locationSendStale: Boolean,
 ) {
     val isConfigured: Boolean get() = baseUrl.isNotEmpty() && apiKey.isNotEmpty()
     val useElevenLabs: Boolean get() = elevenKey.isNotEmpty() && elevenVoiceId.isNotEmpty()
@@ -33,6 +36,9 @@ class SettingsStore(private val context: Context) {
         val ELEVEN_KEY = stringPreferencesKey("eleven_key")
         val ELEVEN_VOICE = stringPreferencesKey("eleven_voice")
         val WAKE_ENABLED = booleanPreferencesKey("wake_enabled")
+        val LOCATION_SHARING = booleanPreferencesKey("location_sharing_enabled")
+        val LOCATION_PRECISE = booleanPreferencesKey("location_precise")
+        val LOCATION_SEND_STALE = booleanPreferencesKey("location_send_stale")
     }
 
     val settings: Flow<JarvisSettings> = context.dataStore.data.map { p ->
@@ -46,7 +52,22 @@ class SettingsStore(private val context: Context) {
             elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "")
                 .ifEmpty { BuildConfig.DEFAULT_ELEVEN_VOICE.ifEmpty { DEFAULT_ELEVEN_VOICE } },
             wakeEnabled = p[Keys.WAKE_ENABLED] ?: false,
+            locationSharingEnabled = p[Keys.LOCATION_SHARING] ?: false,
+            locationPrecise = p[Keys.LOCATION_PRECISE] ?: false,
+            locationSendStale = p[Keys.LOCATION_SEND_STALE] ?: true,
         )
+    }
+
+    suspend fun updateLocationSharing(enabled: Boolean) {
+        context.dataStore.edit { p -> p[Keys.LOCATION_SHARING] = enabled }
+    }
+
+    suspend fun updateLocationPrecise(precise: Boolean) {
+        context.dataStore.edit { p -> p[Keys.LOCATION_PRECISE] = precise }
+    }
+
+    suspend fun updateLocationSendStale(sendStale: Boolean) {
+        context.dataStore.edit { p -> p[Keys.LOCATION_SEND_STALE] = sendStale }
     }
 
     suspend fun updateWake(enabled: Boolean) {

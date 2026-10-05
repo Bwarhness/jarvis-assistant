@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import dk.foss.jarvis.data.ConversationRepository
 import dk.foss.jarvis.data.SettingsStore
 import dk.foss.jarvis.hermes.HermesClient
+import dk.foss.jarvis.location.LocationContextualizer
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.sse.EventSource
@@ -18,6 +19,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val settingsStore = SettingsStore(app)
     private val repo = ConversationRepository.get(app)
     private val main = Handler(Looper.getMainLooper())
+    private val locationContextualizer = LocationContextualizer(app)
+
+    /** 📍 chip: what the agent was last told (null = nothing sent / sharing off). */
+    val lastSentLocation = mutableStateOf<String?>(null)
 
     /** Run on the main thread; returns Unit so it fits expression-body callbacks. */
     private fun onMain(block: () -> Unit) { main.post(block) }
@@ -57,8 +62,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val assistantIndex = repo.addMessage("assistant", "")
             isStreaming.value = true
 
+            // USER_CONTEXT injection (spec §5.2): one system message at index 0,
+            // never persisted to history. Never blocks the turn (5 s cap inside).
+            val locationContext = locationContextualizer.buildContextMessage(s)
+            lastSentLocation.value = locationContextualizer.lastSentLabel
+            val out = locationContext?.let { listOf(it) + history } ?: history
+
             val client = HermesClient(s.baseUrl, s.apiKey)
-            currentSource = client.streamChat(history, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
+            currentSource = client.streamChat(out, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
                 override fun onDelta(textDelta: String) = onMain {
                     repo.appendToMessage(assistantIndex, textDelta)
                 }

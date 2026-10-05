@@ -93,6 +93,11 @@ fun ChatScreen(
                         navigationIconContentColor = JarvisColors.Cyan,
                     ),
                     actions = {
+                        // 📍 transparency chip (spec §7): shows exactly what the
+                        // agent was last told; tapping opens Location settings.
+                        vm.lastSentLocation.value?.let { label ->
+                            LocationChip(label = label, onClick = onOpenSettings)
+                        }
                         IconButton(onClick = onOpenVoice) {
                             Icon(Icons.Default.Mic, contentDescription = "Voice conversation")
                         }
@@ -155,6 +160,28 @@ fun ChatScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LocationChip(label: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(99.dp)
+    Surface(
+        onClick = onClick,
+        color = JarvisColors.Cyan.copy(alpha = 0.12f),
+        shape = shape,
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .border(1.dp, JarvisColors.Cyan.copy(alpha = 0.3f), shape),
+    ) {
+        Text(
+            text = "📍 $label",
+            fontFamily = DmSans,
+            fontSize = 12.sp,
+            color = JarvisColors.Cyan,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            maxLines = 1,
+        )
     }
 }
 
