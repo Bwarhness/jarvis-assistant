@@ -45,7 +45,11 @@ class SettingsStore(private val context: Context) {
         JarvisSettings(
             // Empty stored values fall back to baked-in defaults (older builds wrote
             // empty strings on first run, which would block the v0.3.0 prefill).
-            baseUrl = (p[Keys.BASE_URL] ?: "").takeIf { it.isNotEmpty() } ?: BuildConfig.DEFAULT_BASE_URL,
+            // The legacy public API URL is also migrated away from so pre-existing
+            // installs that stored it land on the baked default (v0.3.3+).
+            baseUrl = (p[Keys.BASE_URL] ?: "").takeIf {
+                it.isNotEmpty() && it != LEGACY_BASE_URL
+            } ?: BuildConfig.DEFAULT_BASE_URL,
             apiKey = (p[Keys.API_KEY] ?: "").takeIf { it.isNotEmpty() } ?: BuildConfig.DEFAULT_API_KEY,
             elevenKey = (p[Keys.ELEVEN_KEY] ?: "").ifEmpty { BuildConfig.DEFAULT_ELEVEN_KEY },
             elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "")
@@ -89,5 +93,6 @@ class SettingsStore(private val context: Context) {
 
     companion object {
         const val DEFAULT_ELEVEN_VOICE = "JBFqnCBsd6RMkjVDRZzb"
+        const val LEGACY_BASE_URL = "https://jarvis-api.biggestblackest.dk/v1"
     }
 }
