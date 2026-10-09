@@ -15,6 +15,12 @@ data class ChatRequest(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val model: String? = null,
     val messages: List<ChatMessage>,
+    // ALWAYS serialize stream explicitly: with encodeDefaults=false the field would be
+    // omitted whenever it equals its default (true), and the api_server then answers
+    // with plain json (content-type application/json) instead of SSE — okhttp's
+    // EventSource rejects that with "Invalid content-type". @EncodeDefault(ALWAYS)
+    // forces the field onto the wire in every request.
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val stream: Boolean = true,
 )
 
