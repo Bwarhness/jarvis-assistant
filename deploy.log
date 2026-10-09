@@ -1,0 +1,197 @@
+── building ──
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageDebug UP-TO-DATE
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug UP-TO-DATE
+
+BUILD SUCCESSFUL in 6s
+37 actionable tasks: 1 executed, 36 up-to-date
+── pushing jarvis-20261006-1607.apk to root@192.168.1.200 ──
+remote md5: 431ba53831d3cd27061cd1ee08e0b81e
+── verifying ──
+✅ deployed: http://tower:8300/
+   direct:   http://tower:8300/jarvis-20261006-1607.apk
+   version:  20261006-1607   md5: 431ba53831d3cd27061cd1ee08e0b81e
+── building ──
+Starting a Gradle Daemon, 1 busy Daemon could not be reused, use --status for details
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+
+> Task :app:compileDebugKotlin
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/hermes/Models.kt:15:6 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/hermes/Models.kt:15:20 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/hermes/Models.kt:15:34 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/hermes/Models.kt:15:39 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/ui/ConversationScreen.kt:67:9 Variable 'reply' is never used
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/ui/ConversationScreen.kt:70:9 Variable 'working' is never used
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/ui/ConversationScreen.kt:193:25 Parameter 'hasPermission' is never used
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/voice/AudioCapture.kt:64:34 Variable 'noiseFloor' initializer is redundant
+w: file:///opt/data/jarvis-assistant/app/src/main/java/dk/foss/jarvis/voice/TtsEngine.kt:37:68 Type mismatch: inferred type is String? but String was expected
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:dexBuilderDebug FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:dexBuilderDebug'.
+> java.io.IOException: Unable to delete directory '/opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out'
+    Failed to delete some children. This might happen because a process has files open or has its working directory set in the target directory.
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/data
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk
+    New files were found. This might happen because a process is still writing to the target directory.
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/VoiceRecognizer.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/SpeechInput$recognitionListener$1.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/ElevenLabsTts$TtsRequest$$serializer.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/AudioCapture.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/SpeechInput.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/ElevenLabsTts.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/voice/ScribeRecognizer$start$2.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/data/SettingsStore$Companion.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/data/SettingsStore.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/JarvisDesignKt$StatusTag$2.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/ConversationScreenKt$SpeakingContent$1$1$1$1$1.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/ConversationViewModel$startStream$1$onError$1.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/HistoryScreenKt$HistoryScreen$2$1$2.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/SettingsScreenKt$SettingsScreen$locationPermLauncher$1$1.dex
+    - /opt/data/jarvis-assistant/app/build/intermediates/project_dex_archive/debug/out/dk/foss/jarvis/ui/SettingsScreenKt$SettingsScreen$overlayLauncher$1.dex
+    - and more ...
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 48s
+31 actionable tasks: 4 executed, 27 up-to-date
+── building ──
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:packageDebug UP-TO-DATE
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug UP-TO-DATE
+
+BUILD SUCCESSFUL in 6s
+37 actionable tasks: 1 executed, 36 up-to-date
+── pushing jarvis-20261006-1631.apk to root@192.168.1.200 ──
+remote md5: 99ff1bebfc1a25e6ad205367231b7695
+── verifying ──
+✅ deployed: http://tower:8300/
+   direct:   http://tower:8300/jarvis-20261006-1631.apk
+   version:  20261006-1631   md5: 99ff1bebfc1a25e6ad205367231b7695

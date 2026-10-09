@@ -69,7 +69,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val out = locationContext?.let { listOf(it) + history } ?: history
 
             val client = HermesClient(s.baseUrl, s.apiKey)
-            currentSource = client.streamChat(out, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
+            currentSource = client.streamChat(out, repo.sessionId, object : HermesClient.StreamCallbacks {
                 override fun onDelta(textDelta: String) = onMain {
                     repo.appendToMessage(assistantIndex, textDelta)
                 }

@@ -13,9 +13,10 @@ import java.io.RandomAccessFile
 import kotlin.math.sqrt
 
 /**
- * Records mic audio to a 16 kHz mono WAV with energy-based voice-activity
- * detection: it waits for speech, then stops after a short trailing silence.
- * Callbacks are delivered on the main thread.
+ * Records mic audio to a 16 kHz mono WAV with adaptive voice-activity
+ * detection: it calibrates to the ambient noise floor on each capture,
+ * then waits for speech that's meaningfully louder than the background.
+ * Trailing silence ends the recording. Callbacks are delivered on the main thread.
  */
 class AudioCapture(private val context: Context) {
 
@@ -56,6 +57,32 @@ class AudioCapture(private val context: Context) {
                 var preRollMs = 0
                 record.startRecording()
 
+                // --- Noise floor calibration ---
+                // Sample ambient noise for a short window to establish the noise floor.
+                // The speech threshold is then set dynamically as a multiple of the
+                // measured floor, so the system works in quiet rooms AND loud cars.
+                var noiseFloor = NOISE_FLOOR_MIN.toDouble()
+                var calibratedThreshold = SPEECH_RMS // fallback before calibration
+                run {
+                    val calFrames = CALIBRATION_MS / (FRAME_SAMPLES * 1000 / SAMPLE_RATE)
+                    var sum = 0.0
+                    var count = 0
+                    val cf = ShortArray(FRAME_SAMPLES)
+                    for (i in 0 until calFrames) {
+                        if (!active || gen != generation) break
+                        val nr = record.read(cf, 0, cf.size)
+                        if (nr <= 0) continue
+                        sum += rms(cf, nr)
+                        count++
+                    }
+                    if (count > 0) {
+                        noiseFloor = (sum / count).coerceAtLeast(NOISE_FLOOR_MIN.toDouble())
+                        calibratedThreshold = (noiseFloor * NOISE_MULTIPLIER)
+                            .coerceAtLeast(NOISE_FLOOR_MIN.toDouble())
+                            .coerceAtMost(SPEECH_RMS.toDouble())
+                    }
+                }
+
                 var speechStarted = false
                 var speechFrames = 0
                 var silenceMs = 0
@@ -69,7 +96,7 @@ class AudioCapture(private val context: Context) {
                     elapsedMs += frameMs
 
                     val rms = rms(frame, n)
-                    val loud = rms > SPEECH_RMS
+                    val loud = rms > calibratedThreshold
 
                     val bytes = ByteArray(n * 2)
                     for (i in 0 until n) {
@@ -195,7 +222,10 @@ class AudioCapture(private val context: Context) {
         const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
         const val FRAME_SAMPLES = SAMPLE_RATE / 20 // 50ms frames
         const val PREROLL_MS = 600        // audio kept before detection so word onsets aren't clipped
-        const val SPEECH_RMS = 1000.0     // RMS above this = speech (higher = less noise-trigger)
+        const val SPEECH_RMS = 1000.0     // absolute ceiling for calibrated threshold (quiet room fallback)
+        const val NOISE_MULTIPLIER = 2.5  // threshold = noiseFloor * this (speech must be 2.5x louder than ambient)
+        const val NOISE_FLOOR_MIN = 300   // minimum threshold even in dead silence (prevents hair-trigger)
+        const val CALIBRATION_MS = 600    // how long to sample ambient noise at start (~600ms)
         const val END_SILENCE_MS = 1800   // trailing silence that ends a turn (allows mid-sentence pauses)
         const val NO_SPEECH_MS = 8000     // give up if nobody speaks
         const val MAX_MS = 30000          // hard cap on a single utterance

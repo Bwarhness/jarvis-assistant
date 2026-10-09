@@ -84,7 +84,6 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     var baseUrl by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
-    var model by remember { mutableStateOf(SettingsStore.DEFAULT_MODEL) }
     var elevenKey by remember { mutableStateOf("") }
     var elevenVoice by remember { mutableStateOf(SettingsStore.DEFAULT_ELEVEN_VOICE) }
     fun isBatteryExempt(): Boolean {
@@ -131,7 +130,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 
     suspend fun persist() {
-        store.updateConnection(baseUrl, apiKey, model)
+        store.updateConnection(baseUrl, apiKey)
         store.updateVoice(elevenKey, elevenVoice)
     }
 
@@ -240,7 +239,6 @@ fun SettingsScreen(onBack: () -> Unit) {
         val s = store.settings.first()
         baseUrl = s.baseUrl
         apiKey = s.apiKey
-        model = s.model
         elevenKey = s.elevenKey
         elevenVoice = s.elevenVoiceId
         wakeEnabled = s.wakeEnabled
@@ -343,14 +341,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                     label = { Text("API key (Bearer)") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors,
-                )
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it },
-                    label = { Text("Model") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = textFieldColors,
                 )

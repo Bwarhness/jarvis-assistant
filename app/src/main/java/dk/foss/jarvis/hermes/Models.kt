@@ -1,5 +1,6 @@
 package dk.foss.jarvis.hermes
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -7,7 +8,12 @@ data class ChatMessage(val role: String, val content: String)
 
 @Serializable
 data class ChatRequest(
-    val model: String,
+    // Server-side default: `model` is deliberately OMITTED so the Hermes api_server
+    // resolves whichever model the server itself is configured for (verified live:
+    // omitting the field yields HTTP 200 with the server's active model).
+    // Sending an empty string hangs — never do that.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val model: String? = null,
     val messages: List<ChatMessage>,
     val stream: Boolean = true,
 )

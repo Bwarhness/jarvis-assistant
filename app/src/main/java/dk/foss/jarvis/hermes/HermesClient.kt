@@ -21,7 +21,9 @@ class HermesClient(
     private val baseUrl: String,
     private val apiKey: String,
 ) {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    // encodeDefaults = false: ChatRequest.model is @EncodeDefault(NEVER) + null, so the
+    // field is omitted from the wire JSON entirely — the api_server resolves its own model.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     interface StreamCallbacks {
         fun onDelta(textDelta: String)
@@ -32,13 +34,12 @@ class HermesClient(
 
     fun streamChat(
         messages: List<ChatMessage>,
-        model: String,
         sessionId: String?,
         cb: StreamCallbacks,
     ): EventSource {
         val body = json.encodeToString(
             ChatRequest.serializer(),
-            ChatRequest(model = model, messages = messages, stream = true),
+            ChatRequest(messages = messages, stream = true),
         )
         val builder = Request.Builder()
             .url("$baseUrl/v1/chat/completions")

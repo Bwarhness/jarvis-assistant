@@ -76,7 +76,7 @@ class WakeWordService : Service() {
                 // 25k synthetic examples of "jarvis" / "hey jarvis" with 500k steps.
                 // Much higher recall than the original hey_jarvis_v0.1 (which peaked at
                 // ~0.3-0.45 and often missed). Fallback: hey_jarvis_v0.1.onnx.
-                WakeWordModel("jarvis", "jarvis_v1.onnx", MODEL_THRESHOLD),
+                WakeWordModel("jarvis", "jarvis_v2.onnx", MODEL_THRESHOLD),
             )
             val e = WakeWordEngine(this, models, DetectionMode.SINGLE_BEST, COOLDOWN_MS, engineScope)
             engine = e
@@ -112,7 +112,11 @@ class WakeWordService : Service() {
         while (recentScores.size > SMOOTHING_FRAMES) recentScores.removeFirst()
         val sustained = recentScores.size == SMOOTHING_FRAMES &&
             recentScores.sum() / SMOOTHING_FRAMES >= SUSTAINED_THRESHOLD
-        if (score < STRONG_THRESHOLD && !sustained) return
+        // Require BOTH a strong single frame AND a sustained moderate average.
+        // A lone noise blip can spike one frame but not hold the window, so it can't
+        // trigger on its own — cuts the false-wake rate for "hey Jarvis" without
+        // sacrificing recall when the phrase is actually said.
+        if (score < STRONG_THRESHOLD || !sustained) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastTriggerAt < REFRACTORY_MS) return
@@ -234,12 +238,11 @@ class WakeWordService : Service() {
         // Model threshold kept high so the library's built-in detection/logging stays
         // dormant; we decide from `scores` below.
         private const val MODEL_THRESHOLD = 0.95f
-        // Fire on a single strong frame (lowered from 0.5 — community jarvis_v1 model
-        // scores differently than hey_jarvis_v0.1, peaks are more moderate)...
-        private const val STRONG_THRESHOLD = 0.3f
-        // ...or on a sustained moderate average over the smoothing window (lowered
-        // to catch more near-misses with the new model).
-        private const val SUSTAINED_THRESHOLD = 0.2f
+        // Fire on a single strong frame (kept conservative — jarvis_v2 is a
+        // lower-false-positive model, so the gate stays tighter to avoid spurious wakes).
+        private const val STRONG_THRESHOLD = 0.4f
+        // ...and require the sustained average to clear a firmer bar than before.
+        private const val SUSTAINED_THRESHOLD = 0.3f
         private const val SMOOTHING_FRAMES = 5 // ~0.4 s at 80 ms/frame (was 3)
         private const val REFRACTORY_MS = 2500L // ignore re-triggers right after a fire
         private const val BURST_FLOOR = 0.1f // score above which a "voice burst" is in progress

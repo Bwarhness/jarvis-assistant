@@ -236,7 +236,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startStream(myTurn: Int, s: JarvisSettings, out: List<dk.foss.jarvis.hermes.ChatMessage>) {
         val client = HermesClient(s.baseUrl, s.apiKey)
-        source = client.streamChat(out, s.model, repo.sessionId, object : HermesClient.StreamCallbacks {
+        source = client.streamChat(out, repo.sessionId, object : HermesClient.StreamCallbacks {
             override fun onDelta(textDelta: String) = onMain {
                 if (turn == myTurn) onTextDelta(textDelta)
             }

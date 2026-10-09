@@ -15,7 +15,6 @@ private val Context.dataStore by preferencesDataStore(name = "jarvis_settings")
 data class JarvisSettings(
     val baseUrl: String,
     val apiKey: String,
-    val model: String,
     val elevenKey: String,
     val elevenVoiceId: String,
     val wakeEnabled: Boolean,
@@ -32,7 +31,6 @@ class SettingsStore(private val context: Context) {
     private object Keys {
         val BASE_URL = stringPreferencesKey("base_url")
         val API_KEY = stringPreferencesKey("api_key")
-        val MODEL = stringPreferencesKey("model")
         val ELEVEN_KEY = stringPreferencesKey("eleven_key")
         val ELEVEN_VOICE = stringPreferencesKey("eleven_voice")
         val WAKE_ENABLED = booleanPreferencesKey("wake_enabled")
@@ -42,12 +40,13 @@ class SettingsStore(private val context: Context) {
     }
 
     val settings: Flow<JarvisSettings> = context.dataStore.data.map { p ->
+        // Note: `model` was removed from settings (v0.3.0) — the server picks its own
+        // model. A stale `model` key may remain in DataStore from old installs; ignored.
         JarvisSettings(
-            baseUrl = p[Keys.BASE_URL] ?: BuildConfig.DEFAULT_BASE_URL,
-            apiKey = p[Keys.API_KEY] ?: BuildConfig.DEFAULT_API_KEY,
-            // Empty, or the previous default ("kimi-for-coding"), migrates to DEFAULT_MODEL
-            // so existing installs flip to the new model; a deliberately-set model is kept.
-            model = (p[Keys.MODEL] ?: "").let { if (it.isEmpty() || it == LEGACY_MODEL) DEFAULT_MODEL else it },
+            // Empty stored values fall back to baked-in defaults (older builds wrote
+            // empty strings on first run, which would block the v0.3.0 prefill).
+            baseUrl = (p[Keys.BASE_URL] ?: "").takeIf { it.isNotEmpty() } ?: BuildConfig.DEFAULT_BASE_URL,
+            apiKey = (p[Keys.API_KEY] ?: "").takeIf { it.isNotEmpty() } ?: BuildConfig.DEFAULT_API_KEY,
             elevenKey = (p[Keys.ELEVEN_KEY] ?: "").ifEmpty { BuildConfig.DEFAULT_ELEVEN_KEY },
             elevenVoiceId = (p[Keys.ELEVEN_VOICE] ?: "")
                 .ifEmpty { BuildConfig.DEFAULT_ELEVEN_VOICE.ifEmpty { DEFAULT_ELEVEN_VOICE } },
@@ -74,11 +73,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { p -> p[Keys.WAKE_ENABLED] = enabled }
     }
 
-    suspend fun updateConnection(baseUrl: String, apiKey: String, model: String) {
+    suspend fun updateConnection(baseUrl: String, apiKey: String) {
         context.dataStore.edit { p ->
             p[Keys.BASE_URL] = baseUrl.trim().trimEnd('/')
             p[Keys.API_KEY] = apiKey.trim()
-            p[Keys.MODEL] = model.trim().ifEmpty { DEFAULT_MODEL }
         }
     }
 
@@ -90,8 +88,6 @@ class SettingsStore(private val context: Context) {
     }
 
     companion object {
-        const val DEFAULT_MODEL = "mimo-v2.5-pro-ultraspeed"
-        const val LEGACY_MODEL = "kimi-for-coding" // prior default; migrated to DEFAULT_MODEL
         const val DEFAULT_ELEVEN_VOICE = "JBFqnCBsd6RMkjVDRZzb"
     }
 }
