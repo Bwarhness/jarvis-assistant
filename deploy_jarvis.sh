@@ -24,7 +24,9 @@ APK_IN="$REPO/app/build/outputs/apk/debug/app-debug.apk"
 if [ $# -ge 1 ]; then
   VER="$1"
 else
-  VER=$(date +%Y%m%d-%H%M)
+  # Default to the APK's versionName (debug suffix stripped) so names stay stable
+  VER=$(python3 -c "import json;v=json.load(open('$REPO/app/build/outputs/apk/debug/output-metadata.json'))['elements'][0]['versionName'];print(v.removesuffix('-debug'))" 2>/dev/null || true)
+  [ -n "$VER" ] || VER=$(date +%Y%m%d-%H%M)
 fi
 APK_NAME="jarvis-${VER}.apk"
 
