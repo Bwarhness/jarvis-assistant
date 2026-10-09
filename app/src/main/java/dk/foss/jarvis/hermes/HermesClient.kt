@@ -18,9 +18,15 @@ import okhttp3.sse.EventSources
  * for a connection test. Bearer auth; session continuity via X-Hermes-Session-Id.
  */
 class HermesClient(
-    private val baseUrl: String,
-    private val apiKey: String,
+    val baseUrl: String,
+    val apiKey: String,
 ) {
+    // Accept EITHER "http://host:port" OR "http://host:port/v1" (older configs/UI
+    // stored it with /v1). The request builders append /v1/... themselves, so strip
+    // a trailing /v1(+slash) to avoid the classic /v1/v1/... 404.
+    private val urlBase: String =
+        baseUrl.trimEnd('/').removeSuffix("/v1").trimEnd('/')
+
     // encodeDefaults = false: ChatRequest.model is @EncodeDefault(NEVER) + null, so the
     // field is omitted from the wire JSON entirely — the api_server resolves its own model.
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
@@ -42,7 +48,7 @@ class HermesClient(
             ChatRequest(messages = messages, stream = true),
         )
         val builder = Request.Builder()
-            .url("$baseUrl/v1/chat/completions")
+            .url("$urlBase/v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Accept", "text/event-stream")
             .post(body.toRequestBody(JSON_MEDIA))
@@ -95,7 +101,7 @@ class HermesClient(
     suspend fun testConnection(): Result<List<String>> = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder()
-                .url("$baseUrl/v1/models")
+                .url("$urlBase/v1/models")
                 .addHeader("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
